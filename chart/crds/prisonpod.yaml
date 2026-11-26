@@ -26,6 +26,9 @@ spec:
         - name: Repos
           type: string
           jsonPath: .status.repos
+        - name: Session
+          type: string
+          jsonPath: .status.sessionURL
         - name: Age
           type: date
           jsonPath: .metadata.creationTimestamp
@@ -124,6 +127,9 @@ spec:
                       lastTransitionTime:
                         type: string
                         format: date-time
+                sessionURL:
+                  type: string
+                  description: The Remote Control session on claude.ai, once the agent has registered it.
                 repos:
                   type: string
                   description: Comma-separated repo names, for the Repos printer column.

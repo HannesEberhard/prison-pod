@@ -11,11 +11,13 @@ import kubernetes
 from kubernetes.client.rest import ApiException
 
 from manifests import GROUP, NAME_LABEL, build_deployment, build_pvc
-from status import build_status, current_pod
+from status import agent_running, build_status, current_pod
 
 AGENT_IMAGE = os.environ.get("AGENT_IMAGE", "")
 STORAGE_CLASS = os.environ.get("STORAGE_CLASS", "")  # empty: cluster default
 FIELD_MANAGER = "prison-pod-operator"
+# Remote Control prints the session URL right after starting.
+LOG_HEAD_BYTES = 64 * 1024
 
 
 def is_pinned_by_digest(image: str) -> bool:
@@ -76,7 +78,13 @@ def reconcile(body, spec, meta, name, namespace, status, patch, logger, **_):
     pods = json.loads(core.list_namespaced_pod(
         namespace, label_selector=f"{NAME_LABEL}={name}", _preload_content=False,
     ).data)["items"]
+    pod = current_pod(pods)
+    agent_log = ""
+    if agent_running(pod):
+        agent_log = core.read_namespaced_pod_log(
+            pod["metadata"]["name"], namespace, container="agent", limit_bytes=LOG_HEAD_BYTES,
+        )
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    desired = build_status(spec, meta["generation"], current_pod(pods), status, now)
+    desired = build_status(spec, meta["generation"], pod, agent_log, status, now)
     if any(status.get(key) != value for key, value in desired.items()):
         patch.status.update(desired)

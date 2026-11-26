@@ -63,9 +63,10 @@ def test_apply_deployment_sends_a_server_side_apply_request(monkeypatch):
 class FakeApi:
     """Stands in for both CoreV1Api (PVCs) and AppsV1Api (Deployments)."""
 
-    def __init__(self, pvc=None, pods=()):
+    def __init__(self, pvc=None, pods=(), log=""):
         self.pvc = pvc
         self.pods = list(pods)
+        self.log = log
         self.created = []
         self.applied = []
 
@@ -85,6 +86,10 @@ class FakeApi:
     def list_namespaced_pod(self, namespace, label_selector, _preload_content):
         assert (namespace, label_selector, _preload_content) == ("ns", f"{main.NAME_LABEL}=demo", False)
         return SimpleNamespace(data=json.dumps({"items": self.pods}).encode())
+
+    def read_namespaced_pod_log(self, name, namespace, container, limit_bytes):
+        assert (name, namespace, container) == ("p", "ns", "agent")
+        return self.log
 
 
 @pytest.fixture
@@ -124,12 +129,14 @@ RUNNING_POD = {
 }
 
 
-def test_reconcile_reports_the_pod_in_status(run):
-    patch = run(FakeApi(pods=[RUNNING_POD]))
+def test_reconcile_reports_the_pod_and_session_in_status(run):
+    url = "https://claude.ai/code/session_01AbC"
+    patch = run(FakeApi(pods=[RUNNING_POD], log=f"Session: {url}\n"))
     assert patch.status["observedGeneration"] == 2
     assert patch.status["repos"] == "api"
+    assert patch.status["sessionURL"] == url
     [ready] = patch.status["conditions"]
-    assert (ready["status"], ready["reason"]) == ("True", "AgentRunning")
+    assert (ready["status"], ready["reason"]) == ("True", "SessionRegistered")
 
 
 def test_reconcile_skips_unchanged_status(run):

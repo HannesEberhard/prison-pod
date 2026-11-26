@@ -1,9 +1,11 @@
 """Derives a PrisonPod's status from its pod (plain API JSON, as returned by the pods list)."""
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
 Pod = Mapping[str, Any]
+SESSION_URL = re.compile(r"https://claude\.ai/code/session_[A-Za-z0-9]+")
 
 
 def current_pod(pods: list[Pod]) -> Pod | None:
@@ -26,7 +28,22 @@ def _failure(container_status: Mapping[str, Any]) -> str | None:
     return None
 
 
-def readiness(pod: Pod | None) -> tuple[bool, str, str]:
+def _agent(pod: Pod | None) -> Mapping[str, Any] | None:
+    statuses = (pod or {}).get("status", {}).get("containerStatuses", [])
+    return next((c for c in statuses if c["name"] == "agent"), None)
+
+
+def agent_running(pod: Pod | None) -> bool:
+    return "running" in ((_agent(pod) or {}).get("state") or {})
+
+
+def session_url(agent_log: str) -> str:
+    """The last session URL Remote Control printed, or ''."""
+    urls = SESSION_URL.findall(agent_log)
+    return urls[-1] if urls else ""
+
+
+def readiness(pod: Pod | None, url: str) -> tuple[bool, str, str]:
     """(ready, reason, message) for the Ready condition."""
     if pod is None:
         return False, "PodPending", "no pod yet"
@@ -41,13 +58,13 @@ def readiness(pod: Pod | None) -> tuple[bool, str, str]:
         if init.get("state", {}).get("terminated", {}).get("exitCode") != 0:
             return False, "Cloning", init["name"]
 
-    agent = next((c for c in pod_status.get("containerStatuses", []) if c["name"] == "agent"), None)
-    if agent is None or "running" not in agent.get("state", {}):
-        failure = agent and _failure(agent)
-        if failure:
+    if not agent_running(pod):
+        if failure := _failure(_agent(pod) or {}):
             return False, "AgentNotRunning", failure
         return False, "PodPending", "starting containers"
-    return True, "AgentRunning", ""
+    if not url:
+        return False, "WaitingForSession", "Remote Control has not printed a session URL yet"
+    return True, "SessionRegistered", ""
 
 
 def ready_condition(ready: bool, reason: str, message: str, previous: list[Mapping[str, Any]], now: str) -> dict:
@@ -59,11 +76,14 @@ def ready_condition(ready: bool, reason: str, message: str, previous: list[Mappi
 
 
 def build_status(
-    spec: Mapping[str, Any], generation: int, pod: Pod | None, previous: Mapping[str, Any], now: str,
+    spec: Mapping[str, Any], generation: int, pod: Pod | None, agent_log: str, previous: Mapping[str, Any], now: str,
 ) -> dict:
+    """`agent_log` is the start of the running agent's log, or '' if it isn't running."""
+    url = session_url(agent_log) if agent_running(pod) else ""
     return {
         "observedGeneration": generation,
-        "conditions": [ready_condition(*readiness(pod), previous.get("conditions", []), now)],
+        "conditions": [ready_condition(*readiness(pod, url), previous.get("conditions", []), now)],
+        "sessionURL": url,
         # Printer columns show only the first match of a list JSONPath, so join the names here.
         "repos": ",".join(repo["name"] for repo in spec["repos"]),
     }

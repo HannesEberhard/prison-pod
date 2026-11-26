@@ -108,12 +108,26 @@ def test_current_pod_is_the_newest_that_is_not_terminating():
                 running("agent"),
                 {"name": "ssh", "state": {"waiting": {"reason": "CrashLoopBackOff"}}},
             ]),
-            (True, "AgentRunning", ""),
+            (False, "WaitingForSession", "Remote Control has not printed a session URL yet"),
         ),
     ],
 )
 def test_readiness(the_pod, expected):
-    assert status.readiness(the_pod) == expected
+    assert status.readiness(the_pod, "") == expected
+
+
+RUNNING = pod(conditions=SCHEDULED, initContainerStatuses=[done("clone-api")], containerStatuses=[running("agent")])
+URL = "https://claude.ai/code/session_01AbC"
+
+
+def test_ready_once_the_session_is_registered():
+    assert status.readiness(RUNNING, URL) == (True, "SessionRegistered", "")
+
+
+def test_session_url_is_the_last_one_printed():
+    log = f"Resuming…\nhttps://claude.ai/code/session_old.\nSession: {URL}\x1b[0m\n"
+    assert status.session_url(log) == URL
+    assert status.session_url("no session to resume\n") == ""
 
 
 def test_last_transition_time_moves_only_when_the_status_flips():
@@ -124,11 +138,22 @@ def test_last_transition_time_moves_only_when_the_status_flips():
 
 
 def test_build_status():
-    assert status.build_status(SPEC, 3, None, {}, NOW) == {
+    assert status.build_status(SPEC, 3, None, "", {}, NOW) == {
         "observedGeneration": 3,
         "conditions": [{
             "type": "Ready", "status": "False", "reason": "PodPending", "message": "no pod yet",
             "lastTransitionTime": NOW,
         }],
+        "sessionURL": "",
         "repos": "api,web",
     }
+
+
+def test_build_status_reports_the_session_url():
+    built = status.build_status(SPEC, 3, RUNNING, f"{URL}\n", {}, NOW)
+    assert built["sessionURL"] == URL
+    assert built["conditions"][0]["reason"] == "SessionRegistered"
+
+
+def test_build_status_ignores_the_log_of_an_agent_that_is_not_running():
+    assert status.build_status(SPEC, 3, None, f"{URL}\n", {}, NOW)["sessionURL"] == ""
