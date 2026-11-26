@@ -16,6 +16,10 @@ spec:
     name: Your Name
     email: you@example.com
   # permissionMode: auto
+  # egress:                     # besides the repo hosts and Claude; everything else is blocked
+  #   - host: registry.npmjs.org
+  #   - host: github.com
+  #     ports: [443, 22]          # default: [443]
   # ssh:
   #   authorizedKeys:
   #     - ssh-ed25519 AAAA… you@laptop

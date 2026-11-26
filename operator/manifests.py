@@ -1,6 +1,7 @@
 """Builds the objects a PrisonPod owns: a PVC, a Cilium network policy and a single-replica Deployment
 running Claude Code Remote Control."""
 
+from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -158,14 +159,18 @@ def _tcp(ports: Iterable[int]) -> list[dict]:
 
 
 def build_network_policy(name: str, spec: Mapping[str, Any], settings: Settings) -> dict:
-    """Default deny in both directions; egress only to DNS, the essential hosts and the repo hosts."""
-    repo_hosts = [urlsplit(repo["url"]).hostname for repo in spec["repos"]]
+    """Default deny in both directions; egress only to DNS, the essential and repo hosts, and spec.egress."""
+    hosts_by_ports: dict[tuple[int, ...], list[str]] = defaultdict(list)
+    hosts_by_ports[(443,)] += settings.essential_hosts
+    hosts_by_ports[(443,)] += [urlsplit(repo["url"]).hostname for repo in spec["repos"]]
+    for entry in spec.get("egress", []):
+        hosts_by_ports[tuple(sorted(set(entry.get("ports", [443]))))].append(entry["host"])
     dns = {
         "toEndpoints": [{"matchLabels": {"k8s:io.kubernetes.pod.namespace": "kube-system", "k8s:k8s-app": "kube-dns"}}],
         # Lookups go through Cilium's DNS proxy, which is how toFQDNs learns the IPs behind a name.
         "toPorts": [{"ports": [{"port": "53", "protocol": "ANY"}], "rules": {"dns": [{"matchPattern": "*"}]}}],
     }
-    https = {"toFQDNs": _fqdns([*settings.essential_hosts, *repo_hosts]), "toPorts": _tcp([443])}
+    allowed = [{"toFQDNs": _fqdns(hosts), "toPorts": _tcp(ports)} for ports, hosts in sorted(hosts_by_ports.items())]
     return {
         "apiVersion": "cilium.io/v2",
         "kind": "CiliumNetworkPolicy",
@@ -174,6 +179,6 @@ def build_network_policy(name: str, spec: Mapping[str, Any], settings: Settings)
             "endpointSelector": {"matchLabels": labels(name)},
             # Explicit, because without any ingress rules Cilium would leave ingress open.
             "enableDefaultDeny": {"ingress": True, "egress": True},
-            "egress": [dns, https],
+            "egress": [dns, *allowed],
         },
     }

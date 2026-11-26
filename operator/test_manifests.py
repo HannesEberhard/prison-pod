@@ -159,3 +159,27 @@ def test_network_policy_allows_essential_and_repo_hosts_on_443():
         {"matchPattern": "*.anthropic.com"}, {"matchName": "claude.ai"}, {"matchName": "github.com"}, {"matchName": "h"},
     ]
     assert https["toPorts"] == [{"ports": [{"port": "443", "protocol": "TCP"}]}]
+
+
+def test_network_policy_allows_spec_egress_grouped_by_ports():
+    spec = {**SPEC, "egress": [
+        {"host": "registry.npmjs.org"},
+        {"host": "github.com", "ports": [22, 443]},
+        {"host": "*.githubusercontent.com", "ports": [443]},
+        {"host": "gitlab.com", "ports": [443, 22]},
+    ]}
+    settings = manifests.Settings(image=IMAGE, essential_hosts=("claude.ai",))
+    _, *allowed = manifests.build_network_policy("demo", spec, settings)["spec"]["egress"]
+    assert allowed == [
+        {
+            "toFQDNs": [{"matchName": "github.com"}, {"matchName": "gitlab.com"}],
+            "toPorts": [{"ports": [{"port": "22", "protocol": "TCP"}, {"port": "443", "protocol": "TCP"}]}],
+        },
+        {
+            "toFQDNs": [
+                {"matchPattern": "*.githubusercontent.com"}, {"matchName": "claude.ai"}, {"matchName": "h"},
+                {"matchName": "registry.npmjs.org"},
+            ],
+            "toPorts": [{"ports": [{"port": "443", "protocol": "TCP"}]}],
+        },
+    ]

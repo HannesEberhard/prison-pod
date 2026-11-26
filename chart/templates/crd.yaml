@@ -111,6 +111,33 @@ spec:
                     email:
                       type: string
                       minLength: 1
+                egress:
+                  type: array
+                  description: >-
+                    Hosts the sandbox may connect to, besides the repo hosts and the chart's essential hosts
+                    (Claude). Everything else is blocked.
+                  maxItems: 50
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys: [host]
+                  items:
+                    type: object
+                    required: [host]
+                    properties:
+                      host:
+                        type: string
+                        description: A hostname, or *.domain for its direct subdomains (one level, not domain itself).
+                        maxLength: 253
+                        pattern: '^(\*\.)?([a-z0-9]([-a-z0-9]*[a-z0-9])?\.)+[a-z]([-a-z0-9]*[a-z0-9])?$'
+                      ports:
+                        type: array
+                        description: TCP ports. Defaults to 443.
+                        minItems: 1
+                        maxItems: 10
+                        x-kubernetes-list-type: set
+                        items:
+                          type: integer
+                          minimum: 1
+                          maximum: 65535
                 permissionMode:
                   type: string
                   enum: [default, acceptEdits, auto, bypassPermissions, dontAsk, plan]
