@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Prints the sandbox's system prompt (agent/system-prompt.md) with its {{PLACEHOLDERS}} filled in
+# from the environment the operator sets. Used by entrypoint.sh at every start.
+set -euo pipefail
+
+template=${PROMPT_TEMPLATE:-/usr/local/share/prison-pod/system-prompt.md}
+git_dir=${GIT_CREDENTIALS_DIR:-/secrets/git}
+
+repos=""
+while IFS=$'\t' read -r name url ref; do
+  [[ -n "$name" ]] || continue
+  repos+="  - \`/data/workspace/$name\` from $url${ref:+ (ref \`$ref\`)}"$'\n'
+done <<<"${PP_REPOS:-}"
+repos=${repos%$'\n'}
+
+if [[ -f "$git_dir/token" ]]; then
+  host=github.com
+  [[ -f "$git_dir/host" ]] && host=$(<"$git_dir/host")
+  tokens="- A git access token for \`$host\` is configured. git uses it automatically over https for clones, fetches and pushes; you never need to read or handle it. It is sent only to \`$host\`, and it may be read-only: if a push is refused with a permission error, tell the user which scope is missing. Other hosts and ssh remotes have no credentials."
+else
+  tokens="- No git credentials are configured: only public repositories over https work, and you cannot push. If the user wants private repos or pushes, they need to set \`spec.gitCredentialsSecretRef\` on the PrisonPod."
+fi
+
+out=$(<"$template")
+out=${out//'{{NAME}}'/${SANDBOX_NAME:-unknown}}
+out=${out//'{{NAMESPACE}}'/${PP_NAMESPACE:-unknown}}
+out=${out//'{{GIT_USER}}'/${GIT_USER_NAME:-unknown} <${GIT_USER_EMAIL:-unknown}>}
+out=${out//'{{REPOS}}'/$repos}
+out=${out//'{{TOKENS}}'/$tokens}
+printf '%s\n' "$out"

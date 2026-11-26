@@ -110,6 +110,10 @@ kubectl -n prison-pod create secret generic git-credentials --from-literal=token
 - The Secret is mounted into the pod, so Claude can read the token. Use a fine-grained token limited to the repos and permissions the sandbox needs (contents read, plus write to push) with a short expiry.
 - The secret can be added to or removed from a running PrisonPod; the pod restarts and resumes its session.
 
+## System prompt
+
+Claude is told about its sandbox: the repos it works on, the installed tools, rootless installs into `$HOME`, what the network blocks and how to ask you to open a host (a `spec.egress` entry to add), and which tokens exist. The text is [agent/system-prompt.md](agent/system-prompt.md); change it there. At every start the entrypoint fills in the sandbox's name, namespace, repos and git token host and writes the result to `~/.claude/prison-pod.md`, which `~/.claude/CLAUDE.md` imports (`@prison-pod.md`). Your own notes in that `CLAUDE.md` stay. Claude can't see `spec.egress`, so it treats failing connections as blocked.
+
 ## SSH
 
 `spec.ssh.authorizedKeys` adds an `ssh` sidecar: unprivileged sshd as `agent`, listening only on `127.0.0.1:2222`, sharing `/data` with Claude. Only plain public-key lines are accepted. You reach it through kubectl, so nothing is exposed, and SSH grants no access beyond what `kubectl exec` already gives. The host key is generated once per sandbox and kept on the PVC; a recreated PrisonPod gets a new one.

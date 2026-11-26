@@ -22,7 +22,7 @@ def pod_spec(spec=SPEC):
 
 
 def env_of(container):
-    return {e["name"]: e["value"] for e in container["env"]}
+    return {e["name"]: e["value"] for e in container["env"] if "value" in e}
 
 
 def test_metadata_and_selector():
@@ -69,7 +69,9 @@ def test_agent_container():
     assert env_of(agent) == {
         "SANDBOX_NAME": "demo", "PERMISSION_MODE": "acceptEdits",
         "GIT_USER_NAME": "Ada Lovelace", "GIT_USER_EMAIL": "ada@example.com",
+        "PP_REPOS": "api\thttps://h/api.git\tmain\nweb\thttps://h/web.git\t",
     }
+    assert {"name": "PP_NAMESPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}} in agent["env"]
     assert agent["image"] == IMAGE
     assert agent["workingDir"] == "/data/workspace"
 
@@ -215,3 +217,35 @@ def test_credential_helper_only_answers_for_its_host(tmp_path):
     assert run_helper(tmp_path, "protocol=http\nhost=github.com\n\n", {}) == ""
     custom = run_helper(tmp_path, "protocol=https\nhost=gl.example\n\n", {"host": "gl.example", "username": "oauth2"})
     assert custom == "username=oauth2\npassword=s3cret\n"
+
+
+def render_prompt(tmp_path, env, git_files=None):
+    git_dir = tmp_path / "git"
+    git_dir.mkdir()
+    for k, v in (git_files or {}).items():
+        (git_dir / k).write_text(v)
+    env = {"PATH": "/usr/bin:/bin", "PROMPT_TEMPLATE": "../agent/system-prompt.md", "GIT_CREDENTIALS_DIR": str(git_dir), **env}
+    return subprocess.run(["../agent/render-system-prompt"], env=env, text=True, capture_output=True, check=True).stdout
+
+
+PROMPT_ENV = {
+    "SANDBOX_NAME": "demo", "PP_NAMESPACE": "team-a", "GIT_USER_NAME": "Ada", "GIT_USER_EMAIL": "ada@example.com",
+    "PP_REPOS": "api\thttps://h/api.git\tmain\nweb\thttps://h/web.git\t",
+}
+
+
+def test_system_prompt_describes_the_sandbox(tmp_path):
+    out = render_prompt(tmp_path, PROMPT_ENV, {"token": "s3cret", "host": "gl.example"})
+    assert "PrisonPod `demo` in namespace `team-a`" in out
+    assert "`/data/workspace/api` from https://h/api.git (ref `main`)" in out
+    assert "`/data/workspace/web` from https://h/web.git\n" in out
+    assert "token for `gl.example`" in out
+    assert "kubectl -n team-a edit pp demo" in out
+    assert "{{" not in out
+    assert "s3cret" not in out
+
+
+def test_system_prompt_without_git_credentials(tmp_path):
+    out = render_prompt(tmp_path, PROMPT_ENV)
+    assert "No git credentials are configured" in out
+    assert "{{" not in out

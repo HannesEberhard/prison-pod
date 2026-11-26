@@ -23,6 +23,12 @@ fi
 git config --global user.name "$GIT_USER_NAME"
 git config --global user.email "$GIT_USER_EMAIL"
 
+# The sandbox's system prompt, regenerated at every start so it matches the spec and the image.
+# Claude loads ~/.claude/CLAUDE.md; it only imports the generated file, so the user's own notes there stay.
+render-system-prompt > "$HOME/.claude/prison-pod.md.tmp"
+mv "$HOME/.claude/prison-pod.md.tmp" "$HOME/.claude/prison-pod.md"
+grep -qxF '@prison-pod.md' "$HOME/.claude/CLAUDE.md" 2>/dev/null || echo '@prison-pod.md' >> "$HOME/.claude/CLAUDE.md"
+
 rc=(claude remote-control --name "$SANDBOX_NAME" --permission-mode "${PERMISSION_MODE:-auto}")
 
 # Reattach to the session a previous pod recorded on the PVC. --continue exits with an error

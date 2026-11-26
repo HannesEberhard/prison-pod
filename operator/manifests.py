@@ -103,6 +103,8 @@ def build_deployment(name: str, spec: Mapping[str, Any], settings: Settings) -> 
             {"name": "PERMISSION_MODE", "value": spec.get("permissionMode", "auto")},
             {"name": "GIT_USER_NAME", "value": spec["git"]["name"]},
             {"name": "GIT_USER_EMAIL", "value": spec["git"]["email"]},
+            {"name": "PP_NAMESPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
+            {"name": "PP_REPOS", "value": "\n".join(f"{r['name']}\t{r['url']}\t{r.get('ref', '')}" for r in spec["repos"])},
             *git_vars,
         ],
         "volumeMounts": [
