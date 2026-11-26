@@ -22,3 +22,5 @@ sandbox:
       memory: 512Mi
     limits:
       memory: 2Gi
+  # RuntimeClass for sandbox pods, e.g. gvisor. Empty: the cluster's default runtime.
+  runtimeClassName: ""

@@ -28,6 +28,7 @@ class Settings:
     agent_resources: Mapping[str, Any] = field(
         default_factory=lambda: {"requests": {"cpu": "250m", "memory": "512Mi"}, "limits": {"memory": "2Gi"}}
     )
+    runtime_class: str = ""  # empty: the cluster's default runtime
 
 
 def resource_name(name: str) -> str:
@@ -113,6 +114,22 @@ def build_deployment(name: str, spec: Mapping[str, Any], settings: Settings) -> 
         },
     ]
 
+    pod_spec = {
+        "automountServiceAccountToken": False,
+        "securityContext": {
+            "runAsNonRoot": True,
+            "runAsUser": AGENT_UID,
+            "runAsGroup": AGENT_UID,
+            "fsGroup": AGENT_UID,
+            "seccompProfile": {"type": "RuntimeDefault"},
+        },
+        "initContainers": clones,
+        "containers": containers,
+        "volumes": volumes,
+    }
+    if settings.runtime_class:
+        pod_spec["runtimeClassName"] = settings.runtime_class
+
     return {
         "apiVersion": "apps/v1",
         "kind": "Deployment",
@@ -121,21 +138,6 @@ def build_deployment(name: str, spec: Mapping[str, Any], settings: Settings) -> 
             "replicas": 1,
             "strategy": {"type": "Recreate"},  # never two Remote Control sessions side by side
             "selector": {"matchLabels": labels(name)},
-            "template": {
-                "metadata": {"labels": labels(name)},
-                "spec": {
-                    "automountServiceAccountToken": False,
-                    "securityContext": {
-                        "runAsNonRoot": True,
-                        "runAsUser": AGENT_UID,
-                        "runAsGroup": AGENT_UID,
-                        "fsGroup": AGENT_UID,
-                        "seccompProfile": {"type": "RuntimeDefault"},
-                    },
-                    "initContainers": clones,
-                    "containers": containers,
-                    "volumes": volumes,
-                },
-            },
+            "template": {"metadata": {"labels": labels(name)}, "spec": pod_spec},
         },
     }

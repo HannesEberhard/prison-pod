@@ -34,10 +34,11 @@ def test_is_pinned_by_digest(image, pinned):
 def test_settings_from_env():
     settings = main.settings_from_env({
         "AGENT_IMAGE": "a@" + DIGEST, "STORAGE_CLASS": "fast", "STORAGE_SIZE": "20Gi",
-        "AGENT_RESOURCES": '{"limits": {"memory": "4Gi"}}',
+        "AGENT_RESOURCES": '{"limits": {"memory": "4Gi"}}', "RUNTIME_CLASS": "gvisor",
     })
     assert settings == main.Settings(
         image="a@" + DIGEST, storage_class="fast", storage_size="20Gi", agent_resources={"limits": {"memory": "4Gi"}},
+        runtime_class="gvisor",
     )
 
 

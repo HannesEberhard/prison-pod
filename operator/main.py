@@ -18,7 +18,11 @@ from status import agent_running, build_status, current_pod
 
 def settings_from_env(env: Mapping[str, str]) -> Settings:
     """Unset or empty variables keep the defaults."""
-    settings = Settings(image=env.get("AGENT_IMAGE", ""), storage_class=env.get("STORAGE_CLASS", ""))
+    settings = Settings(
+        image=env.get("AGENT_IMAGE", ""),
+        storage_class=env.get("STORAGE_CLASS", ""),
+        runtime_class=env.get("RUNTIME_CLASS", ""),
+    )
     if size := env.get("STORAGE_SIZE"):
         settings = replace(settings, storage_size=size)
     if resources := env.get("AGENT_RESOURCES"):

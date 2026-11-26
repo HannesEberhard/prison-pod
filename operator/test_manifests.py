@@ -124,3 +124,9 @@ def test_credentials_secret_and_security():
     assert ps["automountServiceAccountToken"] is False
     for c in ps["initContainers"] + ps["containers"]:
         assert c["securityContext"]["capabilities"]["drop"] == ["ALL"]
+
+
+def test_runtime_class_is_set_only_when_configured():
+    assert "runtimeClassName" not in pod_spec()
+    d = manifests.build_deployment("demo", SPEC, manifests.Settings(image=IMAGE, runtime_class="gvisor"))
+    assert d["spec"]["template"]["spec"]["runtimeClassName"] == "gvisor"
