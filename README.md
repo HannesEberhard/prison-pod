@@ -20,6 +20,11 @@ spec:
   git:                                      # git config --global user.name / user.email
     name: Your Name
     email: you@example.com
+  egress:                                   # optional, see Network
+    - host: registry.npmjs.org              # ports default to [443]
+    - host: "*.githubusercontent.com"       # direct subdomains
+    - host: github.com
+      ports: [443, 22]
   ssh:                                      # optional, see SSH
     authorizedKeys:
       - ssh-ed25519 AAAA… you@laptop
@@ -35,6 +40,7 @@ fix-login-bug   True    SessionRegistered   api,web   https://claude.ai/code/ses
 
 ```
 PrisonPod ──owns──> PVC prison-pod-<name>                   mounted at /data
+          ├─owns──> CiliumNetworkPolicy prison-pod-<name>   default deny, see Network
           └─owns──> Deployment prison-pod-<name>            1 replica, Recreate
                       └─ Pod (uid 1000, no capabilities)
                           ├─ init clone-<repo>   git clone → /data/workspace/<repo>, skipped if present
@@ -42,12 +48,12 @@ PrisonPod ──owns──> PVC prison-pod-<name>                   mounted at /
                           └─ ssh (optional)      sshd on 127.0.0.1:2222
 ```
 
-- **Reconcile:** a kopf timer runs as soon as a PrisonPod appears and then every 10 seconds. It creates the PVC if it's missing and server-side applies the Deployment, which creates it, corrects drift and rolls out spec changes. Applying an unchanged Deployment changes nothing.
+- **Reconcile:** a kopf timer runs as soon as a PrisonPod appears and then every 10 seconds. It creates the PVC if it's missing and server-side applies the network policy and then the Deployment, which creates them, corrects drift and rolls out spec changes. Applying unchanged objects changes nothing.
 - **Status:** the `Ready` condition follows the pod: `PodPending`, `Cloning`, `CloneFailed` (with git's error), `AgentNotRunning`, `WaitingForSession`, then `SessionRegistered`, at which point the operator has read the session URL from the agent's log into `status.sessionURL`.
 - **Restarts:** the workspace, `$HOME` and the session pointer live on the PVC. A new pod skips existing clones and resumes the previous session with `claude remote-control --continue`. If that fails (more than about 4 hours old, or none recorded), it starts a new session.
 - **One session per sandbox:** a new session runs with `--capacity 1`, a resumed one reattaches to exactly one session, and the `Recreate` strategy ensures two pods never run side by side.
-- **Editing:** `permissionMode`, `git`, `ssh` and the list of repos can be changed; the pod restarts and resumes its session. Repo entries and `credentialsSecretRef` are immutable. A removed repo's directory stays in the workspace.
-- **Deletion:** deleting the PrisonPod garbage-collects the PVC and the Deployment.
+- **Editing:** `permissionMode`, `git`, `ssh` and the list of repos can be changed; the pod restarts and resumes its session. `egress` changes apply to the running pod. Repo entries and `credentialsSecretRef` are immutable. A removed repo's directory stays in the workspace.
+- **Deletion:** deleting the PrisonPod garbage-collects the PVC, the network policy and the Deployment.
 
 ## Install
 
@@ -139,7 +145,15 @@ The operator is three modules: [manifests.py](operator/manifests.py) builds the 
 - **Durability:** the PVC lives as long as the PrisonPod. With node-local storage such as `local-path`, losing the node loses the data. Push your work.
 - **Public repos only:** there are no git credentials yet.
 - **Repos:** clones are skipped when the directory exists, so a removed repo re-added under the same name with a different URL keeps the old checkout.
+- **DNS:** only connections are restricted, not lookups, so a sandbox can still leak data through DNS queries.
 
 ## Network
 
-At runtime, sandboxes need `api.anthropic.com`, `claude.ai`, `claude.com`, `platform.claude.com` and the git hosts, plus whatever rootless installs download (e.g. `github.com`, `pypi.org`, `nodejs.org`). This list is the starting point for Cilium egress policies, which can select sandbox pods by the `prisonpod.fdr2026.dev/name` label.
+Requires [Cilium](https://cilium.io) with its L7 proxy (`enable-l7-proxy`, the default). Each sandbox gets a `CiliumNetworkPolicy` that denies all ingress and all egress except:
+
+- **DNS** to kube-dns, through Cilium's DNS proxy, which is how hostname rules learn the IPs behind a name.
+- **The essential hosts** on 443: what Remote Control needs (`api.anthropic.com`, `claude.ai`, `claude.com`, `platform.claude.com`), set by the chart value `sandbox.essentialHosts`.
+- **The repo hosts** on 443, taken from `spec.repos`.
+- **`spec.egress`**: hostnames, or `*.domain` for its direct subdomains (one level, not the domain itself), each with TCP `ports` (default `[443]`).
+
+Anything else, such as `uv tool install` (`pypi.org`, `files.pythonhosted.org`) or `mise` (`github.com`, `*.githubusercontent.com` and the tool's own hosts), has to be listed in `spec.egress`; changes apply to the running pod. `kubectl exec`, `port-forward` and SSH go through the kubelet and aren't affected.
