@@ -30,16 +30,18 @@ COPY --from=uv /uv /uvx /usr/local/bin/
 RUN curl -fsSL https://mise.run | MISE_VERSION="${MISE_VERSION}" MISE_INSTALL_PATH=/usr/local/bin/mise sh
 
 # Declared here, not at the top: every RUN after an ARG sees it, so bumping it would rebuild the layers above.
+# The binary goes to /usr/local/lib/gh; /usr/local/bin/gh is the wrapper that supplies the git token.
 ARG GH_VERSION=2.103.3
 RUN tarball="gh_${GH_VERSION}_linux_$(dpkg --print-architecture).tar.gz" \
  && cd /tmp \
  && curl -fsSLO "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${tarball}" \
  && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_checksums.txt" \
     | grep " ${tarball}\$" | sha256sum -c - \
- && tar -xzf "$tarball" --strip-components=2 -C /usr/local/bin "${tarball%.tar.gz}/bin/gh" \
+ && mkdir -p /usr/local/lib/gh \
+ && tar -xzf "$tarball" --strip-components=2 -C /usr/local/lib/gh "${tarball%.tar.gz}/bin/gh" \
  && rm "$tarball"
 
-COPY --chmod=755 entrypoint.sh sshd.sh git-credential-secret render-system-prompt /usr/local/bin/
+COPY --chmod=755 entrypoint.sh sshd.sh git-credential-secret render-system-prompt gh /usr/local/bin/
 COPY system-prompt.md /usr/local/share/prison-pod/system-prompt.md
 COPY sshd_config /etc/ssh/sandbox_sshd_config
 # Login shells (e.g. over SSH) reset PATH in /etc/profile.

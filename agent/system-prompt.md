@@ -16,7 +16,7 @@ You are running inside a Prison Pod: a sandboxed, long-lived Kubernetes pod made
 
 ## Tools
 
-Installed: `git`, `gh` (not logged in), `build-essential`, `make`, `python3` (with `venv`), `uv`, `mise`, `jq`, `ripgrep`, `curl`, `unzip`, `nc`, `ssh`, `nano`, `vim`, `less`.
+Installed: `git`, `gh` (GitHub CLI), `build-essential`, `make`, `python3` (with `venv`), `uv`, `mise`, `jq`, `ripgrep`, `curl`, `unzip`, `nc`, `ssh`, `nano`, `vim`, `less`.
 
 Install anything else rootless into `$HOME`, which persists:
 

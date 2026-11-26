@@ -248,4 +248,40 @@ def test_system_prompt_describes_the_sandbox(tmp_path):
 def test_system_prompt_without_git_credentials(tmp_path):
     out = render_prompt(tmp_path, PROMPT_ENV)
     assert "No git credentials are configured" in out
+    assert "`gh` is not logged in" in out
     assert "{{" not in out
+
+
+def test_system_prompt_says_gh_is_logged_in_for_a_github_token(tmp_path):
+    out = render_prompt(tmp_path, PROMPT_ENV, {"token": "s3cret"})
+    assert "`gh` is logged in with the same token" in out
+    assert "api.github.com" in out
+
+
+def run_gh(tmp_path, git_files, env=None):
+    """Runs the gh wrapper against a stub that prints the token it got and its arguments."""
+    git_dir = tmp_path / "git"
+    git_dir.mkdir(exist_ok=True)
+    for k, v in git_files.items():
+        (git_dir / k).write_text(v)
+    real = tmp_path / "real-gh"
+    real.write_text('#!/bin/sh\necho "${GH_TOKEN:-<none>}|$*"\n')
+    real.chmod(0o755)
+    env = {"PATH": "/usr/bin:/bin", "GIT_CREDENTIALS_DIR": str(git_dir), "REAL_GH": str(real), **(env or {})}
+    return subprocess.run(["../agent/gh", "pr", "list"], env=env, text=True, capture_output=True, check=True).stdout
+
+
+def test_gh_wrapper_uses_the_github_token(tmp_path):
+    assert run_gh(tmp_path, {"token": "s3cret\n"}) == "s3cret|pr list\n"
+
+
+def test_gh_wrapper_ignores_a_token_for_another_host(tmp_path):
+    assert run_gh(tmp_path, {"token": "s3cret", "host": "gl.example"}) == "<none>|pr list\n"
+
+
+def test_gh_wrapper_without_a_token(tmp_path):
+    assert run_gh(tmp_path, {}) == "<none>|pr list\n"
+
+
+def test_gh_wrapper_keeps_an_explicit_gh_token(tmp_path):
+    assert run_gh(tmp_path, {"token": "s3cret"}, {"GH_TOKEN": "mine"}) == "mine|pr list\n"

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Runs the real gh, logged in with the git token from the Secret at /secrets/git (see git-credential-secret)
+# when that token is for github.com. Read on every call: no copy on the PVC, and rotation or removal of the
+# Secret applies at once. An explicit GH_TOKEN wins.
+set -euo pipefail
+dir=${GIT_CREDENTIALS_DIR:-/secrets/git}
+host=github.com
+[[ -f "$dir/host" ]] && host=$(<"$dir/host")
+if [[ -z "${GH_TOKEN:-}" && "$host" == github.com && -f "$dir/token" ]]; then
+  GH_TOKEN=$(<"$dir/token")
+  export GH_TOKEN
+fi
+exec "${REAL_GH:-/usr/local/lib/gh/gh}" "$@"

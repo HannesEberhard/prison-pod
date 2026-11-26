@@ -17,9 +17,14 @@ if [[ -f "$git_dir/token" ]]; then
   host=github.com
   [[ -f "$git_dir/host" ]] && host=$(<"$git_dir/host")
   tokens="- A git access token for \`$host\` is configured. git uses it automatically over https for clones, fetches and pushes; you never need to read or handle it. It is sent only to \`$host\`, and it may be read-only: if a push is refused with a permission error, tell the user which scope is missing. Other hosts and ssh remotes have no credentials."
+  if [[ "$host" == github.com ]]; then
+    gh_login="- \`gh\` is logged in with the same token (it may lack scopes for some commands; then tell the user which). It needs \`api.github.com\` to be allowed."
+  fi
 else
   tokens="- No git credentials are configured: only public repositories over https work, and you cannot push. If the user wants private repos or pushes, they need to set \`spec.gitCredentialsSecretRef\` on the PrisonPod."
 fi
+
+tokens+=$'\n'"${gh_login:-- \`gh\` is not logged in: it uses the git token only when that is for github.com.}"
 
 out=$(<"$template")
 out=${out//'{{NAME}}'/${SANDBOX_NAME:-unknown}}

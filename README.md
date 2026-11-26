@@ -107,6 +107,7 @@ kubectl -n prison-pod create secret generic git-credentials --from-literal=token
 - Keys: `token` (required), `username` (default `x-access-token`, which GitHub accepts for any token) and `host` (default `github.com`). Use `host` for another provider, with that provider's `username` (e.g. `oauth2` on GitLab).
 - Repo URLs stay `https://`. A git credential helper sends the token only over https and only to `host`, never to other hosts.
 - It's used by the clones, by Claude and by SSH sessions, so Claude can fetch, and push if the token allows it.
+- For `github.com` tokens, `gh` uses it as well (a wrapper passes it as `GH_TOKEN`, so it's never stored on the volume). `gh` talks to `api.github.com`, which you have to allow in `spec.egress`; give the token the scopes your `gh` commands need (e.g. pull requests).
 - The Secret is mounted into the pod, so Claude can read the token. Use a fine-grained token limited to the repos and permissions the sandbox needs (contents read, plus write to push) with a short expiry.
 - The secret can be added to or removed from a running PrisonPod; the pod restarts and resumes its session.
 
