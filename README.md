@@ -1,5 +1,9 @@
 # prison-pod
 
+<p align="center">
+  <img src="./assets/logo.svg" alt="Prison Pod Logo" width="160">
+</p>
+
 On-demand Claude Code sandboxes on Kubernetes. A `PrisonPod` names git repos, a git identity and a credentials Secret. A small [kopf](https://kopf.readthedocs.io) operator starts a pod that clones the repos and runs `claude remote-control`. You drive the session from [claude.ai/code](https://claude.ai/code) or the Claude app, where it appears under the PrisonPod's name.
 
 ```yaml
