@@ -4,7 +4,7 @@
   <img src="./assets/logo.svg" alt="Prison Pod Logo" width="160">
 </p>
 
-On-demand Claude Code sandboxes on Kubernetes. A `PrisonPod` names git repos, a git identity and a credentials Secret. A small [kopf](https://kopf.readthedocs.io) operator starts a pod that clones the repos and runs `claude remote-control`. You drive the session from [claude.ai/code](https://claude.ai/code) or the Claude app, where it appears under the PrisonPod's name.
+On-demand Claude Code sandboxes on Kubernetes. A `PrisonPod` names git repos, a git identity and a credentials Secret, and optionally a git token for private repos. A small [kopf](https://kopf.readthedocs.io) operator starts a pod that clones the repos and runs `claude remote-control`. You drive the session from [claude.ai/code](https://claude.ai/code) or the Claude app, where it appears under the PrisonPod's name.
 
 ```yaml
 apiVersion: prisonpod.fdr2026.dev/v1alpha1
@@ -14,12 +14,14 @@ metadata:
 spec:
   repos:                                    # cloned to /data/workspace/<name>
     - name: api
-      url: https://github.com/org/api.git   # public, https
+      url: https://github.com/org/api.git   # https
       ref: main                             # optional: branch or tag
     - name: web
       url: https://github.com/org/web.git
   credentialsSecretRef:
     name: claude-credentials                # same namespace, see Usage
+  gitCredentialsSecretRef:                  # optional, for private repos, see Private repos
+    name: git-credentials
   permissionMode: auto                      # auto (default), default, acceptEdits, plan, dontAsk, bypassPermissions
   git:                                      # git config --global user.name / user.email
     name: Your Name
@@ -94,6 +96,20 @@ kubectl -n prison-pod get pp
 kubectl -n prison-pod exec -it deploy/prison-pod-hello-world -- bash
 ```
 
+## Private repos
+
+Create a Secret with an access token and reference it as `spec.gitCredentialsSecretRef`:
+
+```sh
+kubectl -n prison-pod create secret generic git-credentials --from-literal=token=<access token>
+```
+
+- Keys: `token` (required), `username` (default `x-access-token`, which GitHub accepts for any token) and `host` (default `github.com`). Use `host` for another provider, with that provider's `username` (e.g. `oauth2` on GitLab).
+- Repo URLs stay `https://`. A git credential helper sends the token only over https and only to `host`, never to other hosts.
+- It's used by the clones, by Claude and by SSH sessions, so Claude can fetch, and push if the token allows it.
+- The Secret is mounted into the pod, so Claude can read the token. Use a fine-grained token limited to the repos and permissions the sandbox needs (contents read, plus write to push) with a short expiry.
+- The secret can be added to or removed from a running PrisonPod; the pod restarts and resumes its session.
+
 ## SSH
 
 `spec.ssh.authorizedKeys` adds an `ssh` sidecar: unprivileged sshd as `agent`, listening only on `127.0.0.1:2222`, sharing `/data` with Claude. Only plain public-key lines are accepted. You reach it through kubectl, so nothing is exposed, and SSH grants no access beyond what `kubectl exec` already gives. The host key is generated once per sandbox and kept on the PVC; a recreated PrisonPod gets a new one.
@@ -147,7 +163,7 @@ The operator is three modules: [manifests.py](operator/manifests.py) builds the 
 
 - **Credentials:** the Secret is a full account login; anyone who can read Secrets in the namespace can use the account. Each sandbox refreshes its own copy of the token on its PVC, which can leave the Secret's copy stale for sandboxes started later. If that happens, recreate the Secret.
 - **Durability:** the PVC lives as long as the PrisonPod. With node-local storage such as `local-path`, losing the node loses the data. Push your work.
-- **Public repos only:** there are no git credentials yet.
+- **Git credentials:** one token per PrisonPod, for a single host, shared with everything in the sandbox. Only https is supported, not SSH deploy keys.
 - **Repos:** clones are skipped when the directory exists, so a removed repo re-added under the same name with a different URL keeps the old checkout.
 - **DNS:** only connections are restricted, not lookups, so a sandbox can still leak data through DNS queries.
 
