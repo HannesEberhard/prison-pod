@@ -13,3 +13,12 @@ sandbox:
   image: ""
   # StorageClass for each sandbox's PVC (workspace + home). Empty: the cluster's default class.
   storageClass: ""
+  # Size of each sandbox's PVC. Applies to new sandboxes only.
+  storageSize: 5Gi
+  # The agent container, where Claude and everything it starts runs.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 2Gi

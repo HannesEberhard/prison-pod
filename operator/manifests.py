@@ -1,11 +1,11 @@
 """Builds the objects a PrisonPod owns: a PVC and a single-replica Deployment running Claude Code Remote Control."""
 
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any
 
 GROUP = "prisonpod.fdr2026.dev"
 NAME_LABEL = f"{GROUP}/name"
-STORAGE_SIZE = "5Gi"
 
 AGENT_UID = 1000  # must match agent/Dockerfile
 SSH_PORT = 2222  # must match agent/sshd_config
@@ -16,6 +16,18 @@ DATA_DIR = "/data"
 WORKSPACE_DIR = f"{DATA_DIR}/workspace"
 
 CONTAINER_SECURITY = {"allowPrivilegeEscalation": False, "capabilities": {"drop": ["ALL"]}}
+
+
+@dataclass(frozen=True)
+class Settings:
+    """Operator-wide settings for every sandbox, set through the Helm chart."""
+
+    image: str
+    storage_class: str = ""  # empty: cluster default
+    storage_size: str = "5Gi"
+    agent_resources: Mapping[str, Any] = field(
+        default_factory=lambda: {"requests": {"cpu": "250m", "memory": "512Mi"}, "limits": {"memory": "2Gi"}}
+    )
 
 
 def resource_name(name: str) -> str:
@@ -33,10 +45,10 @@ def clone_command(repo: Mapping[str, str]) -> list[str]:
     return ["sh", "-c", script, "clone", f"{WORKSPACE_DIR}/{repo['name']}", *branch, "--", repo["url"]]
 
 
-def build_pvc(name: str, storage_class: str) -> dict:
-    spec = {"accessModes": ["ReadWriteOnce"], "resources": {"requests": {"storage": STORAGE_SIZE}}}
-    if storage_class:
-        spec["storageClassName"] = storage_class
+def build_pvc(name: str, settings: Settings) -> dict:
+    spec = {"accessModes": ["ReadWriteOnce"], "resources": {"requests": {"storage": settings.storage_size}}}
+    if settings.storage_class:
+        spec["storageClassName"] = settings.storage_class
     return {
         "apiVersion": "v1",
         "kind": "PersistentVolumeClaim",
@@ -45,13 +57,13 @@ def build_pvc(name: str, storage_class: str) -> dict:
     }
 
 
-def build_deployment(name: str, spec: Mapping[str, Any], image: str) -> dict:
+def build_deployment(name: str, spec: Mapping[str, Any], settings: Settings) -> dict:
     data_mount = {"name": "data", "mountPath": DATA_DIR}
 
     clones = [
         {
             "name": f"clone-{repo['name']}",
-            "image": image,
+            "image": settings.image,
             "command": clone_command(repo),
             # Puts git's error into the container status, which the Ready condition reports.
             "terminationMessagePolicy": "FallbackToLogsOnError",
@@ -62,7 +74,7 @@ def build_deployment(name: str, spec: Mapping[str, Any], image: str) -> dict:
     ]
     agent = {
         "name": "agent",
-        "image": image,
+        "image": settings.image,
         "workingDir": WORKSPACE_DIR,
         "env": [
             {"name": "SANDBOX_NAME", "value": name},
@@ -72,7 +84,7 @@ def build_deployment(name: str, spec: Mapping[str, Any], image: str) -> dict:
             data_mount,
             {"name": "claude-credentials", "mountPath": CREDENTIALS_DIR, "readOnly": True},
         ],
-        "resources": {"requests": {"cpu": "250m", "memory": "512Mi"}, "limits": {"memory": "2Gi"}},
+        "resources": settings.agent_resources,
         "securityContext": CONTAINER_SECURITY,
     }
     containers = [agent]
@@ -80,7 +92,7 @@ def build_deployment(name: str, spec: Mapping[str, Any], image: str) -> dict:
         containers.append(
             {
                 "name": "ssh",
-                "image": image,
+                "image": settings.image,
                 "command": ["/usr/local/bin/sshd.sh"],
                 "env": [
                     {"name": "SANDBOX_NAME", "value": name},

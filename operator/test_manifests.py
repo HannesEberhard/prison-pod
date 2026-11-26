@@ -13,10 +13,11 @@ SPEC = {
     "permissionMode": "acceptEdits",
 }
 IMAGE = "agent@sha256:" + "0" * 64
+SETTINGS = manifests.Settings(image=IMAGE)
 
 
 def pod_spec(spec=SPEC):
-    return manifests.build_deployment("demo", spec, IMAGE)["spec"]["template"]["spec"]
+    return manifests.build_deployment("demo", spec, SETTINGS)["spec"]["template"]["spec"]
 
 
 def env_of(container):
@@ -24,7 +25,7 @@ def env_of(container):
 
 
 def test_metadata_and_selector():
-    d = manifests.build_deployment("demo", SPEC, IMAGE)
+    d = manifests.build_deployment("demo", SPEC, SETTINGS)
     labels = {manifests.NAME_LABEL: "demo"}
     assert d["metadata"]["name"] == "prison-pod-demo"
     assert d["spec"]["selector"]["matchLabels"] == labels
@@ -97,10 +98,17 @@ def test_data_volume_is_the_pvc():
 
 @pytest.mark.parametrize(("storage_class", "expected"), [("local-path", "local-path"), ("", None)])
 def test_build_pvc(storage_class, expected):
-    pvc = manifests.build_pvc("demo", storage_class)
+    pvc = manifests.build_pvc("demo", manifests.Settings(image=IMAGE, storage_class=storage_class, storage_size="9Gi"))
     assert pvc["metadata"]["name"] == "prison-pod-demo"
     assert pvc["spec"]["accessModes"] == ["ReadWriteOnce"]
+    assert pvc["spec"]["resources"]["requests"]["storage"] == "9Gi"
     assert pvc["spec"].get("storageClassName") == expected
+
+
+def test_agent_resources_come_from_settings():
+    resources = {"limits": {"memory": "8Gi"}}
+    d = manifests.build_deployment("demo", SPEC, manifests.Settings(image=IMAGE, agent_resources=resources))
+    assert d["spec"]["template"]["spec"]["containers"][0]["resources"] == resources
 
 
 def test_permission_mode_defaults():

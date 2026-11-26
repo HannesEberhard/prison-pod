@@ -29,6 +29,10 @@ spec:
               value: {{ include "prison-pod.pinnedImage" (dict "name" "sandbox.image" "ref" .Values.sandbox.image) | quote }}
             - name: STORAGE_CLASS
               value: {{ .Values.sandbox.storageClass | default "" | quote }}
+            - name: STORAGE_SIZE
+              value: {{ .Values.sandbox.storageSize | quote }}
+            - name: AGENT_RESOURCES
+              value: {{ .Values.sandbox.resources | toJson | quote }}
           resources:
             {{- toYaml .Values.operator.resources | nindent 12 }}
           securityContext:

@@ -4,17 +4,29 @@ import json
 import logging
 import os
 import re
+from collections.abc import Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import kopf
 import kubernetes
 from kubernetes.client.rest import ApiException
 
-from manifests import GROUP, NAME_LABEL, build_deployment, build_pvc
+from manifests import GROUP, NAME_LABEL, Settings, build_deployment, build_pvc
 from status import agent_running, build_status, current_pod
 
-AGENT_IMAGE = os.environ.get("AGENT_IMAGE", "")
-STORAGE_CLASS = os.environ.get("STORAGE_CLASS", "")  # empty: cluster default
+
+def settings_from_env(env: Mapping[str, str]) -> Settings:
+    """Unset or empty variables keep the defaults."""
+    settings = Settings(image=env.get("AGENT_IMAGE", ""), storage_class=env.get("STORAGE_CLASS", ""))
+    if size := env.get("STORAGE_SIZE"):
+        settings = replace(settings, storage_size=size)
+    if resources := env.get("AGENT_RESOURCES"):
+        settings = replace(settings, agent_resources=json.loads(resources))
+    return settings
+
+
+SETTINGS = settings_from_env(os.environ)
 FIELD_MANAGER = "prison-pod-operator"
 # Remote Control prints the session URL right after starting.
 LOG_HEAD_BYTES = 64 * 1024
@@ -26,8 +38,8 @@ def is_pinned_by_digest(image: str) -> bool:
 
 @kopf.on.startup()
 def startup(settings: kopf.OperatorSettings, **_):
-    if not is_pinned_by_digest(AGENT_IMAGE):
-        raise kopf.PermanentError(f"AGENT_IMAGE must be pinned by digest, got {AGENT_IMAGE!r}")
+    if not is_pinned_by_digest(SETTINGS.image):
+        raise kopf.PermanentError(f"AGENT_IMAGE must be pinned by digest, got {SETTINGS.image!r}")
     # By default every INFO log line (e.g. each timer run) becomes a Kubernetes Event.
     settings.posting.level = logging.WARNING
     try:
@@ -70,9 +82,9 @@ def reconcile(body, spec, meta, name, namespace, status, patch, logger, **_):
     ensure(
         core.read_namespaced_persistent_volume_claim,
         core.create_namespaced_persistent_volume_claim,
-        build_pvc(name, STORAGE_CLASS), body, logger,
+        build_pvc(name, SETTINGS), body, logger,
     )
-    apply_deployment(apps, build_deployment(name, spec, AGENT_IMAGE), body)
+    apply_deployment(apps, build_deployment(name, spec, SETTINGS), body)
 
     # Plain API JSON: what status.py works on, and what the tests can write by hand.
     pods = json.loads(core.list_namespaced_pod(

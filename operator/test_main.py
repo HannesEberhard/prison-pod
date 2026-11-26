@@ -31,6 +31,21 @@ def test_is_pinned_by_digest(image, pinned):
     assert main.is_pinned_by_digest(image) is pinned
 
 
+def test_settings_from_env():
+    settings = main.settings_from_env({
+        "AGENT_IMAGE": "a@" + DIGEST, "STORAGE_CLASS": "fast", "STORAGE_SIZE": "20Gi",
+        "AGENT_RESOURCES": '{"limits": {"memory": "4Gi"}}',
+    })
+    assert settings == main.Settings(
+        image="a@" + DIGEST, storage_class="fast", storage_size="20Gi", agent_resources={"limits": {"memory": "4Gi"}},
+    )
+
+
+def test_settings_from_env_keeps_defaults_for_empty_values():
+    settings = main.settings_from_env({"AGENT_IMAGE": "a", "STORAGE_SIZE": "", "AGENT_RESOURCES": ""})
+    assert settings == main.Settings(image="a")
+
+
 def test_apply_deployment_sends_a_server_side_apply_request(monkeypatch):
     """Goes through the real client down to the HTTP pool, so the request is what the API server sees."""
     requests = []
@@ -94,7 +109,7 @@ class FakeApi:
 
 @pytest.fixture
 def run(monkeypatch):
-    monkeypatch.setattr(main, "AGENT_IMAGE", "agent@" + DIGEST)
+    monkeypatch.setattr(main, "SETTINGS", main.Settings(image="agent@" + DIGEST))
 
     def _run(api, status=None):
         monkeypatch.setattr(main.kubernetes.client, "CoreV1Api", lambda: api)
