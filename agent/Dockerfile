@@ -9,8 +9,12 @@ ARG MISE_VERSION=v2026.11.6
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       bash build-essential ca-certificates curl file git jq less make nano \
-      openssh-client procps python3 python3-venv ripgrep unzip vim xz-utils \
- && rm -rf /var/lib/apt/lists/*
+      netcat-openbsd openssh-client openssh-server \
+      procps python3 python3-venv ripgrep unzip vim xz-utils \
+ && rm -rf /var/lib/apt/lists/* \
+ # Host keys are generated per sandbox by sshd.sh, never baked into the image.
+ && rm -f /etc/ssh/ssh_host_* \
+ && mkdir -p /run/sshd
 
 # HOME is on the sandbox's PVC (mounted at /data by the operator), so user-level installs persist.
 ENV HOME=/data/home
@@ -25,7 +29,10 @@ RUN curl -fsSL https://claude.ai/install.sh | HOME=/tmp/claude-install bash -s "
 COPY --from=uv /uv /uvx /usr/local/bin/
 RUN curl -fsSL https://mise.run | MISE_VERSION="${MISE_VERSION}" MISE_INSTALL_PATH=/usr/local/bin/mise sh
 
-COPY --chmod=755 entrypoint.sh /usr/local/bin/
+COPY --chmod=755 entrypoint.sh sshd.sh /usr/local/bin/
+COPY sshd_config /etc/ssh/sandbox_sshd_config
+# Login shells (e.g. over SSH) reset PATH in /etc/profile.
+RUN echo 'export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"' > /etc/profile.d/sandbox.sh
 
 ENV PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH" \
     MISE_HIDE_UPDATE_WARNING=1 \

@@ -1,0 +1,23 @@
+# Unprivileged sshd for the `ssh` sidecar. Loopback only: reached through
+# `kubectl exec … nc` or `kubectl port-forward`, never from other pods.
+Port 2222
+ListenAddress 127.0.0.1
+HostKey /data/sshd/host_ed25519
+AuthorizedKeysFile /data/sshd/authorized_keys
+AllowUsers agent
+
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+UsePAM no
+PidFile none
+# /data is world-writable on local-path volumes; agent is the only user anyway.
+StrictModes no
+
+AllowTcpForwarding local
+AllowAgentForwarding yes
+X11Forwarding no
+PrintMotd no
+Subsystem sftp internal-sftp
+
+# sshd doesn't pass on the container's environment.
+SetEnv PATH=/data/home/.local/bin:/data/home/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin MISE_HIDE_UPDATE_WARNING=1 DISABLE_TELEMETRY=1 DISABLE_UPDATES=1
