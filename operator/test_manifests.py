@@ -183,3 +183,35 @@ def test_network_policy_allows_spec_egress_grouped_by_ports():
             "toPorts": [{"ports": [{"port": "443", "protocol": "TCP"}]}],
         },
     ]
+
+
+def test_git_credentials_reach_clones_agent_and_ssh():
+    spec = {**SPEC, "gitCredentialsSecretRef": {"name": "gh"}, "ssh": {"authorizedKeys": ["ssh-ed25519 AAAA"]}}
+    pod = pod_spec(spec)
+    for c in [*pod["initContainers"], *pod["containers"]]:
+        assert {"name": "GIT_CONFIG_VALUE_0", "value": manifests.GIT_HELPER} in c["env"]
+        assert {"name": "git-credentials", "mountPath": "/secrets/git", "readOnly": True} in c["volumeMounts"]
+    assert {"name": "git-credentials", "secret": {"secretName": "gh", "defaultMode": 0o440}} in pod["volumes"]
+
+
+def test_no_git_credentials_by_default():
+    pod = pod_spec()
+    assert all(v["name"] != "git-credentials" for v in pod["volumes"])
+    assert not any("GIT_CONFIG_COUNT" in str(c.get("env")) for c in pod["initContainers"] + pod["containers"])
+
+
+def run_helper(tmp_path, stdin, files):
+    """Runs the real credential helper against a fake secret directory."""
+    for k, v in files.items():
+        (tmp_path / k).write_text(v)
+    script = open("../agent/git-credential-secret").read().replace("dir=/secrets/git", f"dir={tmp_path}")
+    return subprocess.run(["bash", "-c", script, "helper", "get"], input=stdin, text=True, capture_output=True, check=True).stdout
+
+
+def test_credential_helper_only_answers_for_its_host(tmp_path):
+    ok = run_helper(tmp_path, "protocol=https\nhost=github.com\n\n", {"token": "s3cret\n"})
+    assert ok == "username=x-access-token\npassword=s3cret\n"
+    assert run_helper(tmp_path, "protocol=https\nhost=evil.example\n\n", {}) == ""
+    assert run_helper(tmp_path, "protocol=http\nhost=github.com\n\n", {}) == ""
+    custom = run_helper(tmp_path, "protocol=https\nhost=gl.example\n\n", {"host": "gl.example", "username": "oauth2"})
+    assert custom == "username=oauth2\npassword=s3cret\n"

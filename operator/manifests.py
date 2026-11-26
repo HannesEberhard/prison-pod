@@ -13,6 +13,8 @@ NAME_LABEL = f"{GROUP}/name"
 AGENT_UID = 1000  # must match agent/Dockerfile
 SSH_PORT = 2222  # must match agent/sshd_config
 CREDENTIALS_DIR = "/secrets/claude"  # must match agent/entrypoint.sh
+GIT_CREDENTIALS_DIR = "/secrets/git"  # must match agent/git-credential-secret
+GIT_HELPER = "/usr/local/bin/git-credential-secret"
 # One PVC mounted at DATA_DIR; the image puts HOME at /data/home. No subPath mounts:
 # kubelet would create those dirs as root.
 DATA_DIR = "/data"
@@ -51,6 +53,16 @@ def clone_command(repo: Mapping[str, str]) -> list[str]:
     return ["sh", "-c", script, "clone", f"{WORKSPACE_DIR}/{repo['name']}", *branch, "--", repo["url"]]
 
 
+def git_env() -> list[dict[str, str]]:
+    """Makes git (clones, and pushes from the agent or an SSH session) use the mounted token for its host."""
+    return [
+        {"name": "GIT_CONFIG_COUNT", "value": "1"},
+        {"name": "GIT_CONFIG_KEY_0", "value": "credential.helper"},
+        {"name": "GIT_CONFIG_VALUE_0", "value": GIT_HELPER},
+        {"name": "GIT_TERMINAL_PROMPT", "value": "0"},  # fail with git's error instead of hanging
+    ]
+
+
 def build_pvc(name: str, settings: Settings) -> dict:
     spec = {"accessModes": ["ReadWriteOnce"], "resources": {"requests": {"storage": settings.storage_size}}}
     if settings.storage_class:
@@ -65,6 +77,9 @@ def build_pvc(name: str, settings: Settings) -> dict:
 
 def build_deployment(name: str, spec: Mapping[str, Any], settings: Settings) -> dict:
     data_mount = {"name": "data", "mountPath": DATA_DIR}
+    git_secret = spec.get("gitCredentialsSecretRef", {}).get("name")
+    git_mounts = [{"name": "git-credentials", "mountPath": GIT_CREDENTIALS_DIR, "readOnly": True}] if git_secret else []
+    git_vars = git_env() if git_secret else []
 
     clones = [
         {
@@ -73,7 +88,8 @@ def build_deployment(name: str, spec: Mapping[str, Any], settings: Settings) -> 
             "command": clone_command(repo),
             # Puts git's error into the container status, which the Ready condition reports.
             "terminationMessagePolicy": "FallbackToLogsOnError",
-            "volumeMounts": [data_mount],
+            "env": git_vars,
+            "volumeMounts": [data_mount, *git_mounts],
             "securityContext": CONTAINER_SECURITY,
         }
         for repo in spec["repos"]
@@ -87,10 +103,12 @@ def build_deployment(name: str, spec: Mapping[str, Any], settings: Settings) -> 
             {"name": "PERMISSION_MODE", "value": spec.get("permissionMode", "auto")},
             {"name": "GIT_USER_NAME", "value": spec["git"]["name"]},
             {"name": "GIT_USER_EMAIL", "value": spec["git"]["email"]},
+            *git_vars,
         ],
         "volumeMounts": [
             data_mount,
             {"name": "claude-credentials", "mountPath": CREDENTIALS_DIR, "readOnly": True},
+            *git_mounts,
         ],
         "resources": settings.agent_resources,
         "securityContext": CONTAINER_SECURITY,
@@ -105,9 +123,10 @@ def build_deployment(name: str, spec: Mapping[str, Any], settings: Settings) -> 
                 "env": [
                     {"name": "SANDBOX_NAME", "value": name},
                     {"name": "SSH_AUTHORIZED_KEYS", "value": "\n".join(keys)},
+                    *git_vars,
                 ],
                 "ports": [{"name": "ssh", "containerPort": SSH_PORT}],
-                "volumeMounts": [data_mount],
+                "volumeMounts": [data_mount, *git_mounts],
                 # SSH sessions (e.g. a VS Code server) run in this container.
                 "resources": {"requests": {"cpu": "10m", "memory": "64Mi"}, "limits": {"memory": "1Gi"}},
                 "securityContext": CONTAINER_SECURITY,
@@ -120,6 +139,8 @@ def build_deployment(name: str, spec: Mapping[str, Any], settings: Settings) -> 
             "secret": {"secretName": spec["credentialsSecretRef"]["name"], "defaultMode": 0o440},
         },
     ]
+    if git_secret:
+        volumes.append({"name": "git-credentials", "secret": {"secretName": git_secret, "defaultMode": 0o440}})
 
     pod_spec = {
         "automountServiceAccountToken": False,

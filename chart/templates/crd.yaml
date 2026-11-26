@@ -88,6 +88,17 @@ spec:
                   properties:
                     name:
                       type: string
+                gitCredentialsSecretRef:
+                  type: object
+                  required: [name]
+                  description: >-
+                    Optional Secret in the same namespace for private repos. Key `token` (required) is an
+                    access token sent over https as the password; `username` defaults to x-access-token
+                    (GitHub); `host` defaults to github.com and is the only host the token is sent to.
+                    Available to clones, to Claude and to SSH sessions, so use a scoped, revocable token.
+                  properties:
+                    name:
+                      type: string
                 ssh:
                   type: object
                   description: Adds an `ssh` sidecar (sshd on 127.0.0.1:2222, reached via kubectl; see README).

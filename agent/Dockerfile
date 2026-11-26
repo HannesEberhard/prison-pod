@@ -29,7 +29,7 @@ RUN curl -fsSL https://claude.ai/install.sh | HOME=/tmp/claude-install bash -s "
 COPY --from=uv /uv /uvx /usr/local/bin/
 RUN curl -fsSL https://mise.run | MISE_VERSION="${MISE_VERSION}" MISE_INSTALL_PATH=/usr/local/bin/mise sh
 
-COPY --chmod=755 entrypoint.sh sshd.sh /usr/local/bin/
+COPY --chmod=755 entrypoint.sh sshd.sh git-credential-secret /usr/local/bin/
 COPY sshd_config /etc/ssh/sandbox_sshd_config
 # Login shells (e.g. over SSH) reset PATH in /etc/profile.
 RUN echo 'export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"' > /etc/profile.d/sandbox.sh
