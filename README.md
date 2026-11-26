@@ -52,20 +52,19 @@ Images go to [ttl.sh](https://ttl.sh), an anonymous registry that keeps them for
 
 ```sh
 just push     # builds both images, pushes them, writes their digests to .images.yaml
-just deploy   # applies the CRD, then helm upgrade --install into namespace prison-pod
+just deploy   # helm upgrade --install into namespace prison-pod; extra arguments go to helm
 ```
 
 Or with your own registry:
 
 ```sh
-kubectl apply --server-side -f chart/crds/
 helm upgrade --install prison-pod chart/ -n prison-pod --create-namespace \
   --set operator.image=<registry>/prison-pod-operator@sha256:<digest> \
   --set sandbox.image=<registry>/prison-pod-agent@sha256:<digest>
 ```
 
 - Images must be pinned by digest. The chart and the operator both reject tag-only references.
-- Helm installs `chart/crds/` only on first install, hence the separate `kubectl apply`.
+- The CRD is part of the chart's templates, so upgrades update it. `helm uninstall` keeps it, and with it every PrisonPod and its data; delete the CRD yourself to remove those.
 - A new `sandbox.image` or `sandbox.resources` rolls every sandbox pod. Sessions resume, but a running Claude turn is interrupted.
 - Other values: `sandbox.storageClass` (empty: the cluster default), `sandbox.storageSize` (5Gi, applies to new PVCs only) and `sandbox.runtimeClassName` (e.g. `gvisor`). See [chart/values.yaml](chart/values.yaml).
 

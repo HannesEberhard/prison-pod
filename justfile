@@ -29,7 +29,6 @@ push:
     agent=$(digest agent)
     printf 'operator:\n  image: %s\nsandbox:\n  image: %s\n' "$operator" "$agent" | tee .images.yaml
 
-# Apply the CRD (Helm installs it only once) and install or upgrade the chart with the pushed images
+# Install or upgrade the chart (CRD included) with the pushed images
 deploy *helm_args:
-    kubectl apply --server-side -f chart/crds/
     helm upgrade --install prison-pod chart -n {{namespace}} --create-namespace -f .images.yaml {{helm_args}}
