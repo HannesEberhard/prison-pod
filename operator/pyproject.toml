@@ -1,0 +1,14 @@
+[project]
+name = "prison-pod-operator"
+version = "0.1.0"
+requires-python = "==3.12.*"
+dependencies = [
+    "kopf==1.45.2",
+    "kubernetes==37.0.3",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+package = false
