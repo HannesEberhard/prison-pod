@@ -5,7 +5,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
     UV_PYTHON_DOWNLOADS=never uv sync --frozen --no-dev --compile-bytecode
-COPY main.py manifests.py ./
+COPY main.py manifests.py status.py ./
 # kopf calls getpass.getuser(), which needs a passwd entry.
 RUN useradd --uid 1000 --no-create-home kopf
 USER 1000

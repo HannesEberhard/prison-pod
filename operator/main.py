@@ -1,14 +1,17 @@
 """Reconciles each PrisonPod into a PVC and a single-replica Deployment running Claude Code Remote Control."""
 
+import json
 import logging
 import os
 import re
+from datetime import UTC, datetime
 
 import kopf
 import kubernetes
 from kubernetes.client.rest import ApiException
 
-from manifests import GROUP, build_deployment, build_pvc
+from manifests import GROUP, NAME_LABEL, build_deployment, build_pvc
+from status import build_status, current_pod
 
 AGENT_IMAGE = os.environ.get("AGENT_IMAGE", "")
 STORAGE_CLASS = os.environ.get("STORAGE_CLASS", "")  # empty: cluster default
@@ -59,7 +62,7 @@ def apply_deployment(apps, manifest: dict, owner) -> None:
 
 # Timers fire as soon as a PrisonPod is seen, so no separate create handler is needed.
 @kopf.timer(GROUP, "prisonpods", interval=10)
-def reconcile(body, spec, name, logger, **_):
+def reconcile(body, spec, meta, name, namespace, status, patch, logger, **_):
     core, apps = kubernetes.client.CoreV1Api(), kubernetes.client.AppsV1Api()
     # Created once and never updated: it holds the data, and most PVC fields are immutable.
     ensure(
@@ -68,3 +71,12 @@ def reconcile(body, spec, name, logger, **_):
         build_pvc(name, STORAGE_CLASS), body, logger,
     )
     apply_deployment(apps, build_deployment(name, spec, AGENT_IMAGE), body)
+
+    # Plain API JSON: what status.py works on, and what the tests can write by hand.
+    pods = json.loads(core.list_namespaced_pod(
+        namespace, label_selector=f"{NAME_LABEL}={name}", _preload_content=False,
+    ).data)["items"]
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    desired = build_status(spec, meta["generation"], current_pod(pods), status, now)
+    if any(status.get(key) != value for key, value in desired.items()):
+        patch.status.update(desired)

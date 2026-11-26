@@ -53,6 +53,8 @@ def build_deployment(name: str, spec: Mapping[str, Any], image: str) -> dict:
             "name": f"clone-{repo['name']}",
             "image": image,
             "command": clone_command(repo),
+            # Puts git's error into the container status, which the Ready condition reports.
+            "terminationMessagePolicy": "FallbackToLogsOnError",
             "volumeMounts": [data_mount],
             "securityContext": CONTAINER_SECURITY,
         }

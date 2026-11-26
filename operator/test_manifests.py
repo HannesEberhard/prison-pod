@@ -73,6 +73,7 @@ def test_one_clone_init_container_per_repo():
     clones = pod_spec()["initContainers"]
     assert [c["name"] for c in clones] == ["clone-api", "clone-web"]
     assert [c["command"][4] for c in clones] == ["/data/workspace/api", "/data/workspace/web"]
+    assert {c["terminationMessagePolicy"] for c in clones} == {"FallbackToLogsOnError"}
 
 
 def test_no_ssh_sidecar_without_keys():
