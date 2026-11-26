@@ -76,24 +76,24 @@ helm upgrade --install prison-pod chart/ -n prison-pod --create-namespace \
 Remote Control needs a claude.ai subscription login (Pro, Max, Team or Enterprise; Team and Enterprise need it enabled by an admin). It doesn't accept API keys or `claude setup-token` tokens. Log in once with `claude auth login`, then store the credentials together with the `oauthAccount` object from `~/.claude.json`; without that object, Remote Control can't determine your organization.
 
 ```sh
-kubectl -n <ns> create secret generic claude-credentials \
+kubectl -n prison-pod create secret generic claude-credentials \
   --from-file=.credentials.json=$HOME/.claude/.credentials.json \
   --from-file=oauthAccount.json=<(jq .oauthAccount ~/.claude.json)
-kubectl -n <ns> apply -f examples/hello-world.yaml
-kubectl -n <ns> get pp
-kubectl -n <ns> exec -it deploy/prison-pod-hello-world -- bash
+kubectl apply -f examples/hello-world.yaml   # namespace prison-pod
+kubectl -n prison-pod get pp
+kubectl -n prison-pod exec -it deploy/prison-pod-hello-world -- bash
 ```
 
 ## SSH
 
 `spec.ssh.authorizedKeys` adds an `ssh` sidecar: unprivileged sshd as `agent`, listening only on `127.0.0.1:2222`, sharing `/data` with Claude. Only plain public-key lines are accepted. You reach it through kubectl, so nothing is exposed, and SSH grants no access beyond what `kubectl exec` already gives. The host key is generated once per sandbox and kept on the PVC; a recreated PrisonPod gets a new one. To try it, uncomment `ssh` in [examples/hello-world.yaml](examples/hello-world.yaml).
 
-Add to `~/.ssh/config`, with `KUBECONFIG` set and the namespace of your sandboxes:
+Add to `~/.ssh/config`, with `KUBECONFIG` set (and another namespace if your sandboxes live elsewhere):
 
 ```
 Host *.pp
   User agent
-  ProxyCommand sh -c 'exec kubectl -n <ns> exec -i "deploy/prison-pod-${0%%.pp}" -c ssh -- nc 127.0.0.1 2222' %h
+  ProxyCommand sh -c 'exec kubectl -n prison-pod exec -i "deploy/prison-pod-${0%%.pp}" -c ssh -- nc 127.0.0.1 2222' %h
 ```
 
 Then `ssh hello-world.pp` works, and so do `scp`, `rsync`, VS Code Remote-SSH and `ssh -A` (git over SSH with your local keys). `kubectl port-forward deploy/prison-pod-<name> 2222:2222` also works.
