@@ -80,6 +80,8 @@ def build_deployment(name: str, spec: Mapping[str, Any], settings: Settings) -> 
         "env": [
             {"name": "SANDBOX_NAME", "value": name},
             {"name": "PERMISSION_MODE", "value": spec.get("permissionMode", "auto")},
+            {"name": "GIT_USER_NAME", "value": spec["git"]["name"]},
+            {"name": "GIT_USER_EMAIL", "value": spec["git"]["email"]},
         ],
         "volumeMounts": [
             data_mount,

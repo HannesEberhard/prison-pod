@@ -13,6 +13,7 @@ import main
 SPEC = {
     "repos": [{"name": "api", "url": "https://h/api.git"}],
     "credentialsSecretRef": {"name": "claude-credentials"},
+    "git": {"name": "Ada Lovelace", "email": "ada@example.com"},
 }
 BODY = {
     "apiVersion": f"{main.GROUP}/v1alpha1",

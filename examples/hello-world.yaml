@@ -11,6 +11,9 @@ spec:
       ref: main
   credentialsSecretRef:
     name: claude-credentials
+  git:
+    name: Your Name
+    email: you@example.com
   # permissionMode: auto
   # ssh:
   #   authorizedKeys:

@@ -10,6 +10,7 @@ SPEC = {
         {"name": "web", "url": "https://h/web.git"},
     ],
     "credentialsSecretRef": {"name": "claude-credentials"},
+    "git": {"name": "Ada Lovelace", "email": "ada@example.com"},
     "permissionMode": "acceptEdits",
 }
 IMAGE = "agent@sha256:" + "0" * 64
@@ -65,7 +66,10 @@ def test_clone_does_not_evaluate_url(tmp_path, monkeypatch):
 
 def test_agent_container():
     agent = pod_spec()["containers"][0]
-    assert env_of(agent) == {"SANDBOX_NAME": "demo", "PERMISSION_MODE": "acceptEdits"}
+    assert env_of(agent) == {
+        "SANDBOX_NAME": "demo", "PERMISSION_MODE": "acceptEdits",
+        "GIT_USER_NAME": "Ada Lovelace", "GIT_USER_EMAIL": "ada@example.com",
+    }
     assert agent["image"] == IMAGE
     assert agent["workingDir"] == "/data/workspace"
 

@@ -1,6 +1,6 @@
 # prison-pod
 
-On-demand Claude Code sandboxes on Kubernetes. A `PrisonPod` names git repos and a credentials Secret. A small [kopf](https://kopf.readthedocs.io) operator starts a pod that clones the repos and runs `claude remote-control`. You drive the session from [claude.ai/code](https://claude.ai/code) or the Claude app, where it appears under the PrisonPod's name.
+On-demand Claude Code sandboxes on Kubernetes. A `PrisonPod` names git repos, a git identity and a credentials Secret. A small [kopf](https://kopf.readthedocs.io) operator starts a pod that clones the repos and runs `claude remote-control`. You drive the session from [claude.ai/code](https://claude.ai/code) or the Claude app, where it appears under the PrisonPod's name.
 
 ```yaml
 apiVersion: prisonpod.fdr2026.dev/v1alpha1
@@ -17,6 +17,9 @@ spec:
   credentialsSecretRef:
     name: claude-credentials                # same namespace, see Usage
   permissionMode: auto                      # auto (default), default, acceptEdits, plan, dontAsk, bypassPermissions
+  git:                                      # git config --global user.name / user.email
+    name: Your Name
+    email: you@example.com
   ssh:                                      # optional, see SSH
     authorizedKeys:
       - ssh-ed25519 AAAA… you@laptop
@@ -43,7 +46,7 @@ PrisonPod ──owns──> PVC prison-pod-<name>                   mounted at /
 - **Status:** the `Ready` condition follows the pod: `PodPending`, `Cloning`, `CloneFailed` (with git's error), `AgentNotRunning`, `WaitingForSession`, then `SessionRegistered`, at which point the operator has read the session URL from the agent's log into `status.sessionURL`.
 - **Restarts:** the workspace, `$HOME` and the session pointer live on the PVC. A new pod skips existing clones and resumes the previous session with `claude remote-control --continue`. If that fails (more than about 4 hours old, or none recorded), it starts a new session.
 - **One session per sandbox:** a new session runs with `--capacity 1`, a resumed one reattaches to exactly one session, and the `Recreate` strategy ensures two pods never run side by side.
-- **Editing:** `permissionMode`, `ssh` and the list of repos can be changed; the pod restarts and resumes its session. Repo entries and `credentialsSecretRef` are immutable. A removed repo's directory stays in the workspace.
+- **Editing:** `permissionMode`, `git`, `ssh` and the list of repos can be changed; the pod restarts and resumes its session. Repo entries and `credentialsSecretRef` are immutable. A removed repo's directory stays in the workspace.
 - **Deletion:** deleting the PrisonPod garbage-collects the PVC and the Deployment.
 
 ## Install

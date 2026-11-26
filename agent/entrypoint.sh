@@ -18,6 +18,11 @@ if [[ ! -f "$HOME/.claude.json" ]]; then
   mv "$HOME/.claude.json.tmp" "$HOME/.claude.json"
 fi
 
+# From spec.git, applied on every start so edits take effect; ~/.gitconfig is on the PVC,
+# so SSH sessions see it too.
+git config --global user.name "$GIT_USER_NAME"
+git config --global user.email "$GIT_USER_EMAIL"
+
 rc=(claude remote-control --name "$SANDBOX_NAME" --permission-mode "${PERMISSION_MODE:-auto}")
 
 # Reattach to the session a previous pod recorded on the PVC. --continue exits with an error
