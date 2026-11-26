@@ -134,3 +134,28 @@ def test_runtime_class_is_set_only_when_configured():
     assert "runtimeClassName" not in pod_spec()
     d = manifests.build_deployment("demo", SPEC, manifests.Settings(image=IMAGE, runtime_class="gvisor"))
     assert d["spec"]["template"]["spec"]["runtimeClassName"] == "gvisor"
+
+
+def test_network_policy_selects_the_sandbox_and_denies_by_default():
+    np = manifests.build_network_policy("demo", SPEC, SETTINGS)
+    assert (np["apiVersion"], np["kind"]) == ("cilium.io/v2", "CiliumNetworkPolicy")
+    assert np["metadata"]["name"] == "prison-pod-demo"
+    assert np["spec"]["endpointSelector"] == {"matchLabels": {manifests.NAME_LABEL: "demo"}}
+    assert np["spec"]["enableDefaultDeny"] == {"ingress": True, "egress": True}
+    assert "ingress" not in np["spec"]
+
+
+def test_network_policy_allows_dns_through_the_proxy():
+    dns, _ = manifests.build_network_policy("demo", SPEC, SETTINGS)["spec"]["egress"]
+    assert dns["toEndpoints"][0]["matchLabels"]["k8s:k8s-app"] == "kube-dns"
+    assert dns["toPorts"][0]["rules"] == {"dns": [{"matchPattern": "*"}]}
+
+
+def test_network_policy_allows_essential_and_repo_hosts_on_443():
+    spec = {**SPEC, "repos": [{"name": "a", "url": "https://GitHub.com/o/a.git"}, {"name": "b", "url": "https://h/b.git"}]}
+    settings = manifests.Settings(image=IMAGE, essential_hosts=("claude.ai", "*.anthropic.com"))
+    _, https = manifests.build_network_policy("demo", spec, settings)["spec"]["egress"]
+    assert https["toFQDNs"] == [
+        {"matchPattern": "*.anthropic.com"}, {"matchName": "claude.ai"}, {"matchName": "github.com"}, {"matchName": "h"},
+    ]
+    assert https["toPorts"] == [{"ports": [{"port": "443", "protocol": "TCP"}]}]

@@ -1,11 +1,12 @@
 import json
 import logging
+from functools import partial
 from types import SimpleNamespace
 
 import kopf
 import pytest
 import urllib3
-from kubernetes.client import ApiClient, AppsV1Api, Configuration
+from kubernetes.client import ApiClient, AppsV1Api, Configuration, CustomObjectsApi
 from kubernetes.client.rest import ApiException
 
 import main
@@ -36,10 +37,11 @@ def test_settings_from_env():
     settings = main.settings_from_env({
         "AGENT_IMAGE": "a@" + DIGEST, "STORAGE_CLASS": "fast", "STORAGE_SIZE": "20Gi",
         "AGENT_RESOURCES": '{"limits": {"memory": "4Gi"}}', "RUNTIME_CLASS": "gvisor",
+        "ESSENTIAL_HOSTS": '["api.anthropic.com"]',
     })
     assert settings == main.Settings(
         image="a@" + DIGEST, storage_class="fast", storage_size="20Gi", agent_resources={"limits": {"memory": "4Gi"}},
-        runtime_class="gvisor",
+        runtime_class="gvisor", essential_hosts=("api.anthropic.com",),
     )
 
 
@@ -48,7 +50,24 @@ def test_settings_from_env_keeps_defaults_for_empty_values():
     assert settings == main.Settings(image="a")
 
 
-def test_apply_deployment_sends_a_server_side_apply_request(monkeypatch):
+@pytest.mark.parametrize(
+    ("patch", "manifest", "path"),
+    [
+        (
+            lambda api: AppsV1Api(api).patch_namespaced_deployment,
+            {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "prison-pod-demo"}},
+            "/apis/apps/v1/namespaces/ns/deployments/prison-pod-demo",
+        ),
+        (
+            lambda api: partial(
+                CustomObjectsApi(api).patch_namespaced_custom_object, "cilium.io", "v2", plural="ciliumnetworkpolicies",
+            ),
+            {"apiVersion": "cilium.io/v2", "kind": "CiliumNetworkPolicy", "metadata": {"name": "prison-pod-demo"}},
+            "/apis/cilium.io/v2/namespaces/ns/ciliumnetworkpolicies/prison-pod-demo",
+        ),
+    ],
+)
+def test_apply_sends_a_server_side_apply_request(monkeypatch, patch, manifest, path):
     """Goes through the real client down to the HTTP pool, so the request is what the API server sees."""
     requests = []
 
@@ -61,16 +80,12 @@ def test_apply_deployment_sends_a_server_side_apply_request(monkeypatch):
 
     api_client = ApiClient(Configuration(host="https://k8s"))
     monkeypatch.setattr(api_client.rest_client.pool_manager, "request", request)
-    manifest = {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "prison-pod-demo"}}
 
-    main.apply_deployment(AppsV1Api(api_client), manifest, BODY)
+    main.apply(patch(api_client), manifest, BODY)
 
     [(method, url, body, headers)] = requests
     assert method == "PATCH"
-    assert url == (
-        "https://k8s/apis/apps/v1/namespaces/ns/deployments/prison-pod-demo"
-        "?fieldManager=prison-pod-operator&force=true"
-    )
+    assert url == f"https://k8s{path}?fieldManager=prison-pod-operator&force=true"
     assert headers["Content-Type"] == "application/apply-patch+yaml"
     sent = json.loads(body)
     assert sent["metadata"]["namespace"] == "ns"
@@ -85,7 +100,7 @@ class FakeApi:
         self.pods = list(pods)
         self.log = log
         self.created = []
-        self.applied = []
+        self.applied = []  # (kind, name, namespace, body, kwargs), in order
 
     def read_namespaced_persistent_volume_claim(self, name, namespace):
         if self.pvc is None:
@@ -98,7 +113,11 @@ class FakeApi:
         return body
 
     def patch_namespaced_deployment(self, name, namespace, body, **kwargs):
-        self.applied.append((name, namespace, body, kwargs))
+        self.applied.append(("Deployment", name, namespace, body, kwargs))
+
+    def patch_namespaced_custom_object(self, group, version, plural, name, namespace, body, **kwargs):
+        assert (group, version, plural) == ("cilium.io", "v2", "ciliumnetworkpolicies")
+        self.applied.append(("CiliumNetworkPolicy", name, namespace, body, kwargs))
 
     def list_namespaced_pod(self, namespace, label_selector, _preload_content):
         assert (namespace, label_selector, _preload_content) == ("ns", f"{main.NAME_LABEL}=demo", False)
@@ -116,6 +135,7 @@ def run(monkeypatch):
     def _run(api, status=None):
         monkeypatch.setattr(main.kubernetes.client, "CoreV1Api", lambda: api)
         monkeypatch.setattr(main.kubernetes.client, "AppsV1Api", lambda: api)
+        monkeypatch.setattr(main.kubernetes.client, "CustomObjectsApi", lambda: api)
         patch = kopf.Patch()
         main.reconcile(
             body=BODY, spec=SPEC, meta=BODY["metadata"], name="demo", namespace="ns",
@@ -126,18 +146,20 @@ def run(monkeypatch):
     return _run
 
 
-def test_reconcile_creates_the_pvc_once_and_applies_the_deployment_every_time(run):
+def test_reconcile_creates_the_pvc_once_and_applies_policy_and_deployment_every_time(run):
     api = FakeApi()
     run(api)
     run(api)
     [pvc] = api.created
     assert pvc["metadata"]["ownerReferences"][0]["uid"] == "uid-1"
-    assert len(api.applied) == 2
-    name, namespace, deployment, kwargs = api.applied[-1]
-    assert (name, namespace) == ("prison-pod-demo", "ns")
+    # The policy comes first, so a new pod never starts unrestricted.
+    assert [kind for kind, *_ in api.applied] == ["CiliumNetworkPolicy", "Deployment"] * 2
+    for kind, name, namespace, body, kwargs in api.applied:
+        assert (name, namespace) == ("prison-pod-demo", "ns")
+        assert body["metadata"]["ownerReferences"][0]["uid"] == "uid-1"
+        assert (kwargs["field_manager"], kwargs["force"]) == ("prison-pod-operator", True)
+    deployment = api.applied[-1][3]
     assert deployment["spec"]["template"]["spec"]["containers"][0]["image"] == "agent@" + DIGEST
-    assert kwargs["field_manager"] == "prison-pod-operator"
-    assert kwargs["force"] is True
 
 
 RUNNING_POD = {

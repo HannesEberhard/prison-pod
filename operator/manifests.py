@@ -1,8 +1,10 @@
-"""Builds the objects a PrisonPod owns: a PVC and a single-replica Deployment running Claude Code Remote Control."""
+"""Builds the objects a PrisonPod owns: a PVC, a Cilium network policy and a single-replica Deployment
+running Claude Code Remote Control."""
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlsplit
 
 GROUP = "prisonpod.fdr2026.dev"
 NAME_LABEL = f"{GROUP}/name"
@@ -29,6 +31,8 @@ class Settings:
         default_factory=lambda: {"requests": {"cpu": "250m", "memory": "512Mi"}, "limits": {"memory": "2Gi"}}
     )
     runtime_class: str = ""  # empty: the cluster's default runtime
+    # What Remote Control needs; reachable on 443 from every sandbox.
+    essential_hosts: tuple[str, ...] = ("api.anthropic.com", "claude.ai", "claude.com", "platform.claude.com")
 
 
 def resource_name(name: str) -> str:
@@ -141,5 +145,35 @@ def build_deployment(name: str, spec: Mapping[str, Any], settings: Settings) -> 
             "strategy": {"type": "Recreate"},  # never two Remote Control sessions side by side
             "selector": {"matchLabels": labels(name)},
             "template": {"metadata": {"labels": labels(name)}, "spec": pod_spec},
+        },
+    }
+
+
+def _fqdns(hosts: Iterable[str]) -> list[dict[str, str]]:
+    return [{"matchPattern": h} if h.startswith("*.") else {"matchName": h} for h in sorted(set(hosts))]
+
+
+def _tcp(ports: Iterable[int]) -> list[dict]:
+    return [{"ports": [{"port": str(p), "protocol": "TCP"} for p in sorted(set(ports))]}]
+
+
+def build_network_policy(name: str, spec: Mapping[str, Any], settings: Settings) -> dict:
+    """Default deny in both directions; egress only to DNS, the essential hosts and the repo hosts."""
+    repo_hosts = [urlsplit(repo["url"]).hostname for repo in spec["repos"]]
+    dns = {
+        "toEndpoints": [{"matchLabels": {"k8s:io.kubernetes.pod.namespace": "kube-system", "k8s:k8s-app": "kube-dns"}}],
+        # Lookups go through Cilium's DNS proxy, which is how toFQDNs learns the IPs behind a name.
+        "toPorts": [{"ports": [{"port": "53", "protocol": "ANY"}], "rules": {"dns": [{"matchPattern": "*"}]}}],
+    }
+    https = {"toFQDNs": _fqdns([*settings.essential_hosts, *repo_hosts]), "toPorts": _tcp([443])}
+    return {
+        "apiVersion": "cilium.io/v2",
+        "kind": "CiliumNetworkPolicy",
+        "metadata": {"name": resource_name(name), "labels": labels(name)},
+        "spec": {
+            "endpointSelector": {"matchLabels": labels(name)},
+            # Explicit, because without any ingress rules Cilium would leave ingress open.
+            "enableDefaultDeny": {"ingress": True, "egress": True},
+            "egress": [dns, https],
         },
     }

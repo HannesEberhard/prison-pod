@@ -35,6 +35,8 @@ spec:
               value: {{ .Values.sandbox.resources | toJson | quote }}
             - name: RUNTIME_CLASS
               value: {{ .Values.sandbox.runtimeClassName | default "" | quote }}
+            - name: ESSENTIAL_HOSTS
+              value: {{ .Values.sandbox.essentialHosts | toJson | quote }}
           resources:
             {{- toYaml .Values.operator.resources | nindent 12 }}
           securityContext:

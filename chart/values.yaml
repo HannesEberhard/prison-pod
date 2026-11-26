@@ -24,3 +24,10 @@ sandbox:
       memory: 2Gi
   # RuntimeClass for sandbox pods, e.g. gvisor. Empty: the cluster's default runtime.
   runtimeClassName: ""
+  # Reachable on 443 from every sandbox: what Claude Code Remote Control needs. Each sandbox
+  # can also reach its repo hosts and whatever its spec.egress allows; nothing else.
+  essentialHosts:
+    - api.anthropic.com
+    - claude.ai
+    - claude.com
+    - platform.claude.com
