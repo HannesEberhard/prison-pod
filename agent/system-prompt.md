@@ -16,7 +16,7 @@ You are running inside a Prison Pod: a sandboxed, long-lived Kubernetes pod made
 
 ## Tools
 
-Installed: `git`, `build-essential`, `make`, `python3` (with `venv`), `uv`, `mise`, `jq`, `ripgrep`, `curl`, `unzip`, `nc`, `ssh`, `nano`, `vim`, `less`.
+Installed: `git`, `gh` (not logged in), `build-essential`, `make`, `python3` (with `venv`), `uv`, `mise`, `jq`, `ripgrep`, `curl`, `unzip`, `nc`, `ssh`, `nano`, `vim`, `less`.
 
 Install anything else rootless into `$HOME`, which persists:
 
@@ -34,7 +34,7 @@ Outgoing connections are denied by default, and incoming ones are blocked entire
 - The hosts of the repositories above, on port 443.
 - Extra hosts the operator of this sandbox listed in `spec.egress` of the PrisonPod. You can't see that list, so treat a connection that hangs, times out or is reset as blocked.
 
-Package registries and download hosts are blocked unless they were listed. `uv` needs `pypi.org` and `files.pythonhosted.org`; `mise` needs `github.com`, `*.githubusercontent.com` and the tool's own hosts; npm needs `registry.npmjs.org`; Go needs `proxy.golang.org` and `sum.golang.org`; crates need `crates.io` and `static.crates.io`. DNS lookups work for any name, which does not mean the host is reachable.
+Package registries and download hosts are blocked unless they were listed. `uv` needs `pypi.org` and `files.pythonhosted.org`; `mise` needs `github.com`, `*.githubusercontent.com` and the tool's own hosts; npm needs `registry.npmjs.org`; `gh` needs `api.github.com`; Go needs `proxy.golang.org` and `sum.golang.org`; crates need `crates.io` and `static.crates.io`. DNS lookups work for any name, which does not mean the host is reachable.
 
 When something is blocked:
 

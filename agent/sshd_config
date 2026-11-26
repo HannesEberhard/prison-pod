@@ -20,4 +20,4 @@ PrintMotd no
 Subsystem sftp internal-sftp
 
 # sshd doesn't pass on the container's environment.
-SetEnv PATH=/data/home/.local/bin:/data/home/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin MISE_HIDE_UPDATE_WARNING=1 DISABLE_TELEMETRY=1 DISABLE_UPDATES=1
+SetEnv PATH=/data/home/.local/bin:/data/home/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin MISE_HIDE_UPDATE_WARNING=1 DISABLE_TELEMETRY=1 DISABLE_UPDATES=1 GH_NO_UPDATE_NOTIFIER=1

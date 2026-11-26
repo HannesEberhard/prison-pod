@@ -29,6 +29,16 @@ RUN curl -fsSL https://claude.ai/install.sh | HOME=/tmp/claude-install bash -s "
 COPY --from=uv /uv /uvx /usr/local/bin/
 RUN curl -fsSL https://mise.run | MISE_VERSION="${MISE_VERSION}" MISE_INSTALL_PATH=/usr/local/bin/mise sh
 
+# Declared here, not at the top: every RUN after an ARG sees it, so bumping it would rebuild the layers above.
+ARG GH_VERSION=2.103.3
+RUN tarball="gh_${GH_VERSION}_linux_$(dpkg --print-architecture).tar.gz" \
+ && cd /tmp \
+ && curl -fsSLO "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${tarball}" \
+ && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_checksums.txt" \
+    | grep " ${tarball}\$" | sha256sum -c - \
+ && tar -xzf "$tarball" --strip-components=2 -C /usr/local/bin "${tarball%.tar.gz}/bin/gh" \
+ && rm "$tarball"
+
 COPY --chmod=755 entrypoint.sh sshd.sh git-credential-secret render-system-prompt /usr/local/bin/
 COPY system-prompt.md /usr/local/share/prison-pod/system-prompt.md
 COPY sshd_config /etc/ssh/sandbox_sshd_config
@@ -38,6 +48,7 @@ RUN echo 'export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"' > 
 ENV PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH" \
     MISE_HIDE_UPDATE_WARNING=1 \
     DISABLE_TELEMETRY=1 \
-    DISABLE_UPDATES=1
+    DISABLE_UPDATES=1 \
+    GH_NO_UPDATE_NOTIFIER=1
 USER 1000
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

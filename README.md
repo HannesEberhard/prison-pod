@@ -147,7 +147,7 @@ Then `ssh hello-world.pp` works, and so do `scp`, `rsync`, VS Code Remote-SSH an
 
 ## Tools
 
-There's no root, `sudo` or `apt`. The image ships `git`, `build-essential`, `python3`, `jq`, `ripgrep`, `nano`, `vim` and `less`. Install anything else rootless into `$HOME`, which persists on the PVC:
+There's no root, `sudo` or `apt`. The image ships `git`, `gh` (GitHub CLI), `build-essential`, `python3`, `jq`, `ripgrep`, `nano`, `vim` and `less`. Install anything else rootless into `$HOME`, which persists on the PVC:
 
 ```sh
 uv tool install ruff      # Python tools and Python versions
