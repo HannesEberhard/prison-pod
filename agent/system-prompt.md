@@ -38,8 +38,9 @@ Package registries and download hosts are blocked unless they were listed. `uv` 
 
 Blocked connections are dropped silently, not refused: they hang until the client gives up, which can take minutes. So:
 
-- Bound every command that uses the network: `curl --connect-timeout 5 …`, and `timeout 60 …` around git, package managers and installers (`timeout 60 uv tool install ruff`, `timeout 60 npm install`).
-- If a host doesn't answer within a few seconds, it is blocked. Don't retry, don't raise the timeout and don't try other hosts; follow the steps below.
+- Before using a host you haven't reached yet, probe it in three seconds: `nc -z -w 3 <host> 443` (or the port you need). Success means allowed, failure means blocked. Probe every host a task needs up front (e.g. `pypi.org` and `files.pythonhosted.org` for `uv`) and ask for the blocked ones together.
+- Still bound network commands, since tools can reach hosts you didn't expect (redirects, mirrors): `curl --connect-timeout 5 …`, and `timeout 60 …` around git, package managers and installers.
+- A host that failed the probe or timed out is blocked. Don't retry, don't raise the timeout and don't try other hosts; follow the steps below.
 
 When something is blocked:
 
