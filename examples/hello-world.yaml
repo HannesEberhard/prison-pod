@@ -16,7 +16,10 @@ spec:
     name: Your Name
     email: you@example.com
   # permissionMode: auto
+  # gitCredentialsSecretRef:    # token for private repos, pushes and gh, see README
+  #   name: git-credentials
   # egress:                     # besides the repo hosts and Claude; everything else is blocked
+  #   - host: api.github.com    # gh
   #   - host: registry.npmjs.org
   #   - host: github.com
   #     ports: [443, 22]          # default: [443]
