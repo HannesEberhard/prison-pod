@@ -1,0 +1,89 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: prisonpods.prisonpod.fdr2026.dev
+spec:
+  group: prisonpod.fdr2026.dev
+  scope: Namespaced
+  names:
+    kind: PrisonPod
+    plural: prisonpods
+    singular: prisonpod
+    shortNames: [pp]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          x-kubernetes-validations:
+            - rule: self.metadata.name.size() <= 52
+              message: name must be at most 52 characters (prefixed with prison-pod- in resource names)
+          properties:
+            spec:
+              type: object
+              required: [repos, credentialsSecretRef]
+              properties:
+                repos:
+                  type: array
+                  description: >-
+                    Repositories cloned side by side into /data/workspace/<name>. Entries can be added
+                    and removed; a removed repo's directory stays on the volume.
+                  minItems: 1
+                  maxItems: 10
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys: [name]
+                  items:
+                    type: object
+                    required: [name, url]
+                    x-kubernetes-validations:
+                      - rule: self == oldSelf
+                        message: repo entries are immutable; add the repo under a new name instead
+                    properties:
+                      name:
+                        type: string
+                        description: Directory under /data/workspace; also part of the clone init container's name.
+                        pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                        maxLength: 57
+                      url:
+                        type: string
+                        pattern: '^https://'
+                      ref:
+                        type: string
+                        description: Branch or tag. Defaults to the remote's default branch.
+                credentialsSecretRef:
+                  type: object
+                  required: [name]
+                  description: >-
+                    Secret in the same namespace with keys `.credentials.json` (~/.claude/.credentials.json)
+                    and `oauthAccount.json` (the oauthAccount object from ~/.claude.json) after `claude auth login`.
+                    Immutable: it is copied onto the volume once.
+                  x-kubernetes-validations:
+                    - rule: self == oldSelf
+                      message: credentialsSecretRef is immutable
+                  properties:
+                    name:
+                      type: string
+                ssh:
+                  type: object
+                  description: Adds an `ssh` sidecar (sshd on 127.0.0.1:2222, reached via kubectl; see README).
+                  properties:
+                    authorizedKeys:
+                      type: array
+                      minItems: 1
+                      maxItems: 20
+                      items:
+                        type: string
+                        description: One public key line. authorized_keys options (e.g. command=) are rejected.
+                        pattern: '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+={0,2}( [^\n]*)?$'
+                permissionMode:
+                  type: string
+                  enum: [default, acceptEdits, auto, bypassPermissions, dontAsk, plan]
+                  default: auto
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true

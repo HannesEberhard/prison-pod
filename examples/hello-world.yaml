@@ -1,0 +1,17 @@
+apiVersion: prisonpod.fdr2026.dev/v1alpha1
+kind: PrisonPod
+metadata:
+  name: hello-world
+spec:
+  repos:
+    - name: hello-world
+      url: https://github.com/octocat/Hello-World.git
+    - name: spoon-knife
+      url: https://github.com/octocat/Spoon-Knife.git
+      ref: main
+  credentialsSecretRef:
+    name: claude-credentials
+  # permissionMode: auto
+  # ssh:
+  #   authorizedKeys:
+  #     - ssh-ed25519 AAAA… you@laptop
