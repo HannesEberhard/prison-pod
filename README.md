@@ -86,17 +86,34 @@ kubectl -n prison-pod exec -it deploy/prison-pod-hello-world -- bash
 
 ## SSH
 
-`spec.ssh.authorizedKeys` adds an `ssh` sidecar: unprivileged sshd as `agent`, listening only on `127.0.0.1:2222`, sharing `/data` with Claude. Only plain public-key lines are accepted. You reach it through kubectl, so nothing is exposed, and SSH grants no access beyond what `kubectl exec` already gives. The host key is generated once per sandbox and kept on the PVC; a recreated PrisonPod gets a new one. To try it, uncomment `ssh` in [examples/hello-world.yaml](examples/hello-world.yaml).
+`spec.ssh.authorizedKeys` adds an `ssh` sidecar: unprivileged sshd as `agent`, listening only on `127.0.0.1:2222`, sharing `/data` with Claude. Only plain public-key lines are accepted. You reach it through kubectl, so nothing is exposed, and SSH grants no access beyond what `kubectl exec` already gives. The host key is generated once per sandbox and kept on the PVC; a recreated PrisonPod gets a new one.
+
+A dedicated key keeps your personal keys out of the cluster:
+
+```sh
+ssh-keygen -t ed25519 -N '' -C prison-pod -f ~/.ssh/prison-pod
+```
+
+Put its public key into `spec.ssh` (see the commented lines in [examples/hello-world.yaml](examples/hello-world.yaml)), or add it to a running sandbox. The pod restarts and resumes its session:
+
+```sh
+kubectl -n prison-pod patch pp hello-world --type merge \
+  -p "{\"spec\":{\"ssh\":{\"authorizedKeys\":[\"$(cat ~/.ssh/prison-pod.pub)\"]}}}"
+```
+
+A merge patch replaces the whole list, so include any keys you want to keep. Removing `spec.ssh` removes the sidecar again.
 
 Add to `~/.ssh/config`, with `KUBECONFIG` set (and another namespace if your sandboxes live elsewhere):
 
 ```
 Host *.pp
   User agent
+  IdentityFile ~/.ssh/prison-pod
+  IdentitiesOnly yes
   ProxyCommand sh -c 'exec kubectl -n prison-pod exec -i "deploy/prison-pod-${0%%.pp}" -c ssh -- nc 127.0.0.1 2222' %h
 ```
 
-Then `ssh hello-world.pp` works, and so do `scp`, `rsync`, VS Code Remote-SSH and `ssh -A` (git over SSH with your local keys). `kubectl port-forward deploy/prison-pod-<name> 2222:2222` also works.
+Then `ssh hello-world.pp` works, and so do `scp`, `rsync`, VS Code Remote-SSH and `ssh -A` (git over SSH with your local keys). `IdentitiesOnly` stops ssh from offering every key in your agent first. `kubectl port-forward deploy/prison-pod-<name> 2222:2222` also works.
 
 ## Tools
 
