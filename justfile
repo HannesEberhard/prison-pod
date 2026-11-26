@@ -17,13 +17,15 @@ lint:
 push:
     #!/usr/bin/env bash
     set -euo pipefail
+    shopt -s inherit_errexit  # otherwise a failed push inside $(digest …) goes unnoticed
     id=$(head -c8 /dev/urandom | od -An -tx1 | tr -d ' \n')
     digest() {
-      local ref="ttl.sh/prison-pod-$id-$1:24h"
+      local repo="ttl.sh/prison-pod-$id-$1"
       docker build -q --build-arg http_proxy --build-arg https_proxy --build-arg no_proxy \
-        -t "$ref" "$1/" >/dev/null
-      docker push -q "$ref" >/dev/null
-      docker image inspect "$ref" | jq -r '.[0].RepoDigests[0]'
+        -t "$repo:24h" "$1/" >/dev/null
+      docker push -q "$repo:24h" >/dev/null
+      # The same image may also have been pushed under earlier names.
+      docker image inspect "$repo:24h" | jq -er --arg repo "$repo" '.[0].RepoDigests[] | select(startswith($repo + "@"))'
     }
     operator=$(digest operator)
     agent=$(digest agent)
