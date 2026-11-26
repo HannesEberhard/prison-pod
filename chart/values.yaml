@@ -1,0 +1,15 @@
+operator:
+  # Must be pinned by digest: <image>@sha256:<digest>
+  image: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+sandbox:
+  # Image for every sandbox pod (clone init containers, agent, ssh). Must be pinned by digest.
+  image: ""
+  # StorageClass for each sandbox's PVC (workspace + home). Empty: the cluster's default class.
+  storageClass: ""

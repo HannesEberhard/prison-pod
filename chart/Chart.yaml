@@ -1,0 +1,6 @@
+apiVersion: v2
+name: prison-pod
+description: On-demand Claude Code sandboxes (Remote Control) as a Kubernetes custom resource
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
