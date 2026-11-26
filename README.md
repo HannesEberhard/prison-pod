@@ -6,6 +6,12 @@
 
 On-demand Claude Code sandboxes on Kubernetes. A `PrisonPod` names git repos, a git identity and a credentials Secret, and optionally a git token for private repos. A small [kopf](https://kopf.readthedocs.io) operator starts a pod that clones the repos and runs `claude remote-control`. You drive the session from [claude.ai/code](https://claude.ai/code) or the Claude app, where it appears under the PrisonPod's name.
 
+Requirements:
+
+- A Kubernetes cluster running Cilium with its L7 proxy enabled
+- Helm
+- A claude.ai subscription, for Remote Control
+
 ```yaml
 apiVersion: prisonpod.fdr2026.dev/v1alpha1
 kind: PrisonPod
