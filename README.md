@@ -42,6 +42,12 @@ NAME            READY   REASON              REPOS     SESSION                   
 fix-login-bug   True    SessionRegistered   api,web   https://claude.ai/code/session_01AbC…      3m
 ```
 
+## Requirements
+
+- A Kubernetes cluster with [Cilium](https://cilium.io) and its L7 proxy enabled
+- [Helm](https://helm.sh)
+- A claude.ai subscription, for Remote Control
+
 ## How it works
 
 ```
