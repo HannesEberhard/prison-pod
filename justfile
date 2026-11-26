@@ -1,6 +1,8 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 namespace := "prison-pod"
+# Where .github/workflows/images.yaml pushes to.
+registry := "ghcr.io/hanneseberhard"
 # Placeholder digest so the chart renders without pushed images.
 fake := "x@sha256:" + sha256("")
 
@@ -13,24 +15,22 @@ lint:
     helm lint chart --set operator.image={{fake}} --set sandbox.image={{fake}}
     ! helm template chart --set operator.image=x:latest --set sandbox.image={{fake}} >/dev/null 2>&1
 
-# Build both images, push them to ttl.sh (kept 24h) and record their digests in .images.yaml
-push:
+# Record the digests of the images CI built for a commit (default: main on GitHub) in .images.yaml
+images commit=`jj log -r main@origin --no-graph -T commit_id`:
     #!/usr/bin/env bash
     set -euo pipefail
-    shopt -s inherit_errexit  # otherwise a failed push inside $(digest …) goes unnoticed
-    id=$(head -c8 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    shopt -s inherit_errexit
     digest() {
-      local repo="ttl.sh/prison-pod-$id-$1"
-      docker build -q --build-arg http_proxy --build-arg https_proxy --build-arg no_proxy \
-        -t "$repo:24h" "$1/" >/dev/null
-      docker push -q "$repo:24h" >/dev/null
-      # The same image may also have been pushed under earlier names.
-      docker image inspect "$repo:24h" | jq -er --arg repo "$repo" '.[0].RepoDigests[] | select(startswith($repo + "@"))'
+      local repo="{{registry}}/prison-pod-$1"
+      local d
+      d=$(docker buildx imagetools inspect "$repo:{{commit}}" | awk '/^Digest:/ {print $2}')
+      [[ $d == sha256:* ]]
+      echo "$repo@$d"
     }
     operator=$(digest operator)
     agent=$(digest agent)
     printf 'operator:\n  image: %s\nsandbox:\n  image: %s\n' "$operator" "$agent" | tee .images.yaml
 
-# Install or upgrade the chart (CRD included) with the pushed images
+# Install or upgrade the chart (CRD included) with the images from `just images`
 deploy *helm_args:
     helm upgrade --install prison-pod chart -n {{namespace}} --create-namespace -f .images.yaml {{helm_args}}

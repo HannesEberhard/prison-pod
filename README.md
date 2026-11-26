@@ -51,14 +51,14 @@ PrisonPod ──owns──> PVC prison-pod-<name>                   mounted at /
 
 ## Install
 
-Images go to [ttl.sh](https://ttl.sh), an anonymous registry that keeps them for 24 hours:
+Every push to `main` builds both images and pushes them to `ghcr.io/hanneseberhard/prison-pod-{operator,agent}`, tagged with the commit SHA ([workflow](.github/workflows/images.yaml)). Once it has finished:
 
 ```sh
-just push     # builds both images, pushes them, writes their digests to .images.yaml
+just images   # writes the digests of main's images to .images.yaml (or: just images <commit>)
 just deploy   # helm upgrade --install into namespace prison-pod; extra arguments go to helm
 ```
 
-Or with your own registry:
+The packages must be public (package settings on GitHub), or the cluster needs an image pull Secret. Or with your own images:
 
 ```sh
 helm upgrade --install prison-pod chart/ -n prison-pod --create-namespace \
@@ -122,7 +122,6 @@ The operator is three modules: [manifests.py](operator/manifests.py) builds the 
 - **Durability:** the PVC lives as long as the PrisonPod. With node-local storage such as `local-path`, losing the node loses the data. Push your work.
 - **Public repos only:** there are no git credentials yet.
 - **Repos:** clones are skipped when the directory exists, so a removed repo re-added under the same name with a different URL keeps the old checkout.
-- **ttl.sh:** images expire after 24 hours; a pod scheduled onto a node without a cached copy then fails to pull. Run `just push && just deploy` again.
 
 ## Network
 
