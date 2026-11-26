@@ -36,6 +36,11 @@ Outgoing connections are denied by default, and incoming ones are blocked entire
 
 Package registries and download hosts are blocked unless they were listed. `uv` needs `pypi.org` and `files.pythonhosted.org`; `mise` needs `github.com`, `*.githubusercontent.com` and the tool's own hosts; npm needs `registry.npmjs.org`; `gh` needs `api.github.com`; Go needs `proxy.golang.org` and `sum.golang.org`; crates need `crates.io` and `static.crates.io`. DNS lookups work for any name, which does not mean the host is reachable.
 
+Blocked connections are dropped silently, not refused: they hang until the client gives up, which can take minutes. So:
+
+- Bound every command that uses the network: `curl --connect-timeout 5 …`, and `timeout 60 …` around git, package managers and installers (`timeout 60 uv tool install ruff`, `timeout 60 npm install`).
+- If a host doesn't answer within a few seconds, it is blocked. Don't retry, don't raise the timeout and don't try other hosts; follow the steps below.
+
 When something is blocked:
 
 1. Don't work around it: no tunnels, proxies, alternative mirrors on other hosts or exfiltration tricks. The policy is deliberate.
